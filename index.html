@@ -313,6 +313,71 @@ setInterval(()=>{ if(autoUpdate.checked) loadData(today()) }, 300000);
 // 初始
 dateSelect.value = today();
 loadData(today());
+
+// ===== 進度條相關 =====
+let isLoading = false;
+let progressTimer;
+const tipText = document.getElementById('tipText');
+const tipPercent = document.getElementById('tipPercent');
+
+function setProgress(p){
+  if(tipPercent) tipPercent.textContent = ' ' + p + '%';
+}
+
+function startFakeProgress(){
+  let p = 0;
+  setProgress(0);
+  apiTip.style.display='block';
+  tipText.textContent='載入中';
+  clearInterval(progressTimer);
+  progressTimer = setInterval(()=>{
+    p += Math.random()*15; 
+    if(p >= 90) p = 90;
+    setProgress(Math.floor(p));
+  }, 200);
+}
+
+function endProgress(success=true){
+  clearInterval(progressTimer);
+  if(success){
+    setProgress(100);
+    tipText.textContent='載入完成';
+    setTimeout(()=> apiTip.style.display='none', 800);
+  }else{
+    tipText.textContent='載入失敗';
+    tipPercent.textContent = '';
+  }
+}
+// ===== 進度條相關結束 =====
+
+// 把你原本的 loadData 整個換成這版
+async function loadData(dateStr){
+  if(isLoading) return;
+  isLoading = true;
+  startFakeProgress(); // 開始跑進度
+  
+  try{
+    const d = new Date(dateStr);
+    const rocDate = `${d.getFullYear()-1911}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+    const url = `${API_URL}?date=${rocDate}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(res.statusText);
+    const json = await res.json();
+    
+    allData = json.map(d=>({...d, 平均價:+d.平均價||0, 交易量:+d.交易量||0}));
+    render();
+    endProgress(true);
+  } catch(e){
+    console.error(e);
+    endProgress(false);
+  } finally {
+    isLoading = false;
+  }
+}
+
+// 切日期自動載入
+dateSelect.onchange = () => loadData(dateSelect.value);
+  
 </script>
 </body>
 </html>
