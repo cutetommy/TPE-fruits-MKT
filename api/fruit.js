@@ -5,22 +5,30 @@ export default async function handler(req, res) {
     const text = await response.text();
     const all = JSON.parse(text);
 
-    const allMarkets = [...new Set(all.map(d => d.市場名稱))].filter(Boolean);
-    const sanChong = all.filter(d => d.市場名稱 && d.市場名稱.includes('三重'));
-    const banqiao = all.filter(d => d.市場名稱 && d.市場名稱.includes('板橋'));
-    const fruits = all.filter(d => d.種類代號 === 'N04');
+    const now = new Date();
+    const rocYear = now.getFullYear() - 1911;
+    const today = `${rocYear}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`;
 
-    res.status(200).json({
-      status: 'raw_check',
-      total_rows: all.length,
-      total_fruits_N04: fruits.length,
-      sanchong_count: sanChong.length,
-      banqiao_count: banqiao.length,
-      sanchong_dates: [...new Set(sanChong.map(d => d.交易日期))],
-      first_5_markets: allMarkets.slice(0, 10),
-      sanChong_sample: sanChong.slice(0, 2)
+    // 改這裡：種類代號 → 種類代碼，N04 → N05
+    const raw = all.filter(d =>
+      d.市場名稱 &&
+      (d.市場名稱.includes('三重') || d.市場名稱.includes('板橋')) &&
+      d.種類代碼 === 'N05'  // 改欄位名、改代碼
+    );
+
+    // 同市場+同品名，只留第一筆，去重
+    const seen = new Set();
+    const data = raw.filter(d => {
+      const key = d.市場名稱.trim() + '_' + d.作物名稱.trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 's-maxage=300');
+    res.status(200).json(data);
   } catch (e) {
-    res.status(500).json({error: e.message, stack: e.stack});
+    res.status(500).json({error: e.message});
   }
 }
