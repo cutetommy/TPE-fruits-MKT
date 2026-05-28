@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>新北水果即時行情</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#10b981">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2310b981'/%3E%3Ctext x='50' y='58' font-size='50' text-anchor='middle' fill='white' font-family='Arial'%3E🍍%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href='data:application/json,{
+  "name": "新北水果即時行情",
+  "short_name": "水果行情",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#10b981",
+  "icons": [
+    {"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%2310b981'/%3E%3Ctext x='96' y='120' font-size='100' text-anchor='middle' fill='white'%3E🍍%3C/text%3E%3C/svg%3E", "sizes": "192x192", "type": "image/svg+xml"},
+    {"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%2310b981'/%3E%3Ctext x='256' y='320' font-size='260' text-anchor='middle' fill='white'%3E🍍%3C/text%3E%3C/svg%3E", "sizes": "512x512", "type": "image/svg+xml"}
+  ]
+}'>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;background:#f8fafc;color:#0f172a;line-height:1.5}
+.container{max-width:1200px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.1);padding:20px;margin-bottom:16px}
+.grid{display:grid;gap:16px}
+.grid-4{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+h1{font-size:24px;font-weight:700;margin-bottom:4px}
+h2{font-size:18px;font-weight:600;margin-bottom:12px}
+.label{font-size:12px;color:#64748b;margin-bottom:4px}
+.value{font-size:28px;font-weight:700}
+.value-sm{font-size:20px;font-weight:600}
+.positive{color:#10b981}.negative{color:#f43f5e}
+button,select,input{font:inherit;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff}
+button{background:#10b981;color:#fff;border:none;font-weight:600;cursor:pointer}
+button:disabled{opacity:.5}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px 8px;text-align:left;border-bottom:1px solid #f1f5f9}
+th{font-size:12px;color:#64748b;font-weight:600;background:#f8fafc;position:sticky;top:0}
+tr:hover{background:#f8fafc;cursor:pointer}
+.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600}
+.badge-green{background:#d1fae5;color:#065f46}
+.badge-red{background:#fee2e2;color:#991b1b}
+canvas{max-width:100%;height:auto}
+.tip{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:12px;border-radius:8px;font-size:14px;margin-bottom:16px}
+.flex{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.space{flex:1}
+@media(max-width:640px){.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="flex" style="margin-bottom:16px">
+    <div>
+      <h1>新北水果即時行情</h1>
+      <div class="label">三重 + 板橋果菜市場 | <span id="updateTime">--</span></div>
+    </div>
+    <div class="space"></div>
+    <button id="installBtn" style="display:none">iOS 安裝教學</button>
+  </div>
+
+  <div id="apiTip" class="tip" style="display:none"></div>
+
+  <div class="grid grid-4">
+    <div class="card"><div class="label">今日總交易量</div><div class="value" id="totalVolume">--</div><div class="label" id="volumeChange"></div></div>
+    <div class="card"><div class="label">今日總金額</div><div class="value" id="totalAmount">--</div><div class="label" id="amountChange"></div></div>
+    <div class="card"><div class="label">平均批發價</div><div class="value" id="avgPrice">--</div><div class="label" id="priceChange"></div></div>
+    <div class="card"><div class="label">水果品項數</div><div class="value" id="itemCount">--</div><div class="label" id="dateStr"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="flex" style="margin-bottom:12px">
+      <select id="marketSelect"><option value="all">全部市場</option><option value="三重">三重果菜</option><option value="板橋">板橋果菜</option></select>
+      <input type="date" id="dateSelect">
+      <input type="search" id="searchInput" placeholder="搜尋品項...">
+      <div class="space"></div>
+      <label class="flex"><input type="checkbox" id="autoUpdate"> 自動更新</label>
+      <button id="refreshBtn">更新</button>
+    </div>
+    <div style="overflow:auto;max-height:400px">
+      <table id="dataTable">
+        <thead><tr><th>#</th><th>品項</th><th class="hide-sm">上價</th><th class="hide-sm">中價</th><th class="hide-sm">下價</th><th>均價</th><th>交易量(kg)</th><th>金額(元)</th><th>漲跌</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card"><h2>交易量 Top10</h2><canvas id="barChart" width="400" height="300"></canvas></div>
+    <div class="card"><h2>金額佔比</h2><canvas id="pieChart" width="400" height="300"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>30日均價趨勢：<span id="chartTitle">請點選表格品項</span></h2>
+    <canvas id="lineChart" width="800" height="300"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>歷史區間查詢</h2>
+    <div class="flex" style="margin-bottom:12px">
+      <input type="date" id="startDate"><span>至</span><input type="date" id="endDate">
+      <button id="queryBtn">查詢</button><button id="csvBtn">匯出CSV</button>
+    </div>
+    <div id="historyResult"></div>
+  </div>
+
+  <div class="card" style="font-size:13px;color:#64748b">
+    <b>部署方式：</b><br>
+    1. <b>Vercel</b>：直接把 index.html 拖到 vercel.com/new 即可<br>
+    2. <b>Netlify</b>：拖到 app.netlify.com/drop<br>
+    3. <b>公司內網</b>：放到 Nginx 根目錄，網址就能用<br>
+    <b>資料來源：</b>農業部農產品批發市場交易行情開放資料，每日更新
+  </div>
+</div>
+
+<script>
+// ===== 1. API 串接區塊 =====
+const API_URL = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx';
+const MOCK_DATA = [{"作物名稱":"香蕉","平均價":22.5,"交易量":15230},{"作物名稱":"鳳梨","平均價":28.1,"交易量":12300},{"作物名稱":"西瓜","平均價":15.2,"交易量":25600},{"作物名稱":"芒果","平均價":45.8,"交易量":8900},{"作物名稱":"木瓜","平均價":32.4,"交易量":7600},{"作物名稱":"芭樂","平均價":38.9,"交易量":10200},{"作物名稱":"蓮霧","平均價":65.2,"交易量":3400},{"作物名稱":"葡萄","平均價":89.5,"交易量":4200},{"作物名稱":"火龍果","平均價":42.1,"交易量":5800},{"作物名稱":"柚子","平均價":35.6,"交易量":4900}];
+
+let allData = [], currentData = [], selectedItem = null;
+
+// ===== 2. PWA 註冊 =====
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  const sw = `self.addEventListener('install',e=>e.waitUntil(caches.open('xinbei-v1').then(c=>c.addAll(['./']))));
+  self.addEventListener('fetch',e=>{if(e.request.url.includes('moa.gov.tw')){e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))}else{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))}})`;
+  const blob = new Blob([sw],{type:'text/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob));
+}
+
+// iOS 安裝提示
+if(/iPhone|iPad/.test(navigator.userAgent) &&!window.navigator.standalone){
+  installBtn.style.display='block';
+  installBtn.onclick=()=>alert('iPhone 安裝步驟：\n1. 點下方 Safari 分享按鈕\n2. 選擇「加入主畫面」\n3. 點「新增」即可');
+}
+
+// ===== 3. 工具函數 =====
+const fmt = n => n.toLocaleString('zh-TW');
+const fmtWan = n => (n/10000).toFixed(1)+'萬';
+const today = () => new Date().toISOString().split('T')[0];
+const calcAmount = d => d.平均價 * d.交易量;
+
+// ===== 4. 抓資料 =====
+async function loadData(dateStr){
+  dateSelect.value = dateStr;
+  dateStrEl.textContent = dateStr;
+  try{
+    const res = await fetch(API_URL);
+    const json = await res.json();
+    allData = json.filter(d =>
+      (d.市場名稱.includes('三重') || d.市場名稱.includes('板橋')) &&
+      d.種類代號 === 'N04' &&
+      d.交易日期 === dateStr.replace(/-/g,'/')
+    ).map(d=>({...d, 平均價:+d.平均價, 交易量:+d.交易量}));
+    apiTip.style.display='none';
+  }catch(e){
+    apiTip.textContent='API 連線失敗，目前顯示示範資料';
+    apiTip.style.display='block';
+    allData = MOCK_DATA.map(d=>({...d, 市場名稱:'三重', 交易日期:dateStr}));
+  }
+  render();
+}
+
+// ===== 5. 畫面渲染 =====
+function render(){
+  const market = marketSelect.value;
+  const keyword = searchInput.value;
+  currentData = allData.filter(d =>
+    (market==='all' || d.市場名稱.includes(market)) &&
+    d.作物名稱.includes(keyword)
+  );
+
+  // 統計卡
+  const totalVol = currentData.reduce((s,d)=>s+d.交易量,0);
+  const totalAmt = currentData.reduce((s,d)=>s+calcAmount(d),0);
+  const avgPrc = totalVol? totalAmt/totalVol : 0;
+  totalVolume.textContent = fmt(Math.round(totalVol/1000))+' 噸';
+  totalAmount.textContent = fmtWan(totalAmt)+' 元';
+  avgPrice.textContent = avgPrc.toFixed(1)+' 元/kg';
+  itemCount.textContent = currentData.length;
+  updateTime.textContent = new Date().toLocaleString('zh-TW');
+
+  // 漲跌比對
+  const yKey = 'y_'+dateSelect.value;
+  const yesterday = localStorage.getItem(yKey);
+  if(yesterday){
+    const y = JSON.parse(yesterday);
+    setChange(volumeChange, totalVol, y.vol);
+    setChange(amountChange, totalAmt, y.amt);
+    setChange(priceChange, avgPrc, y.prc);
+  }
+  localStorage.setItem(yKey, JSON.stringify({vol:totalVol,amt:totalAmt,prc:avgPrc}));
+
+  // 表格
+  tbody.innerHTML = currentData.sort((a,b)=>calcAmount(b)-calcAmount(a))
+   .map((d,i)=>{
+      const amt = calcAmount(d);
+      const change = Math.random()*20-10; // 示範：實際應比對昨日
+      return `<tr data-name="${d.作物名稱}">
+        <td>${i+1}</td><td>${d.作物名稱}</td>
+        <td class="hide-sm">${d.上價||'-'}</td><td class="hide-sm">${d.中價||'-'}</td><td class="hide-sm">${d.下價||'-'}</td>
+        <td>${d.平均價.toFixed(1)}</td><td>${fmt(d.交易量)}</td><td>${fmt(Math.round(amt))}</td>
+        <td><span class="badge ${change>=0?'badge-green':'badge-red'}">${change>=0?'↑':'↓'} ${Math.abs(change).toFixed(1)}%</span></td>
+      </tr>`;
+    }).join('');
+
+  // 圖表
+  drawBar();
+  drawPie();
+  if(selectedItem) drawLine(selectedItem);
+}
+
+function setChange(el, now, old){
+  const diff = ((now-old)/old*100);
+  el.textContent = `較昨日 ${diff>=0?'↑':'↓'} ${Math.abs(diff).toFixed(1)}%`;
+  el.className = 'label ' + (diff>=0?'positive':'negative');
+}
+
+// ===== 6. Canvas 圖表 =====
+function drawBar(){
+  const ctx = barChart.getContext('2d'), W=barChart.width, H=barChart.height;
+  ctx.clearRect(0,0,W,H);
+  const data = currentData.slice(0,10);
+  const max = Math.max(...data.map(d=>d.交易量));
+  const barH = (H-40)/data.length;
+  ctx.font='12px system-ui';
+  data.forEach((d,i)=>{
+    const w = (d.交易量/max)*(W-100);
+    ctx.fillStyle='#10b981';
+    ctx.fillRect(80, 20+i*barH, w, barH-4);
+    ctx.fillStyle='#0f172a';
+    ctx.fillText(d.作物名稱, 5, 32+i*barH);
+    ctx.fillText(fmt(d.交易量), 85+w, 32+i*barH);
+  });
+}
+
+function drawPie(){
+  const ctx = pieChart.getContext('2d'), W=pieChart.width, H=pieChart.height;
+  ctx.clearRect(0,0,W,H);
+  const data = currentData.slice(0,8);
+  const total = data.reduce((s,d)=>s+calcAmount(d),0);
+  let start = -Math.PI/2;
+  const cx=W/2, cy=H/2, r=100;
+  const colors=['#10b981','#34d399','#6ee7b7','#a7f3d0','#059669','#047857','#065f46','#064e3b'];
+  ctx.font='12px system-ui';
+  data.forEach((d,i)=>{
+    const amt = calcAmount(d);
+    const angle = (amt/total)*Math.PI*2;
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start+angle);
+    ctx.fillStyle=colors[i];ctx.fill();
+    const mid = start+angle/2;
+    const x = cx + Math.cos(mid)*(r+15);
+    const y = cy + Math.sin(mid)*(r+15);
+    ctx.fillStyle='#0f172a';
+    ctx.fillText(d.作物名稱, x-20, y);
+    start += angle;
+  });
+}
+
+function drawLine(name){
+  selectedItem = name;
+  chartTitle.textContent = name;
+  const ctx = lineChart.getContext('2d'), W=lineChart.width, H=lineChart.height;
+  ctx.clearRect(0,0,W,H);
+  // 示範：產生30天假資料。實際應改成 fetch 歷史API
+  const data = Array.from({length:30},(_,i)=>({
+    date: i, price: 20+Math.random()*40
+  }));
+  const max = Math.max(...data.map(d=>d.price));
+  const min = Math.min(...data.map(d=>d.price));
+  const pad=40, w=(W-pad*2)/(data.length-1), h=H-pad*2;
+  ctx.strokeStyle='#10b981';ctx.lineWidth=2;ctx.beginPath();
+  data.forEach((d,i)=>{
+    const x = pad + i*w;
+    const y = pad + (1-(d.price-min)/(max-min))*h;
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  });
+  ctx.stroke();
+  ctx.fillStyle='#64748b';ctx.font='12px system-ui';
+  ctx.fillText(max.toFixed(1), 5, pad+5);
+  ctx.fillText(min.toFixed(1), 5, H-pad);
+}
+
+// ===== 7. 事件 =====
+refreshBtn.onclick = () => loadData(dateSelect.value);
+marketSelect.onchange = searchInput.oninput = render;
+tbody.onclick = e => {
+  const tr = e.target.closest('tr');
+  if(tr) drawLine(tr.dataset.name);
+};
+setInterval(()=>{ if(autoUpdate.checked) loadData(today()) }, 300000);
+
+// 初始
+dateSelect.value = today();
+loadData(today());
+</script>
+</body>
+</html>
