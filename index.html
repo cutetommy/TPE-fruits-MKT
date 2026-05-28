@@ -331,7 +331,7 @@ function startFakeProgress(){
   tipText.textContent='載入中';
   clearInterval(progressTimer);
   progressTimer = setInterval(()=>{
-    p += Math.random()*15; 
+    p += Math.random()*8; 
     if(p >= 90) p = 90;
     setProgress(Math.floor(p));
   }, 200);
