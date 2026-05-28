@@ -1,42 +1,13 @@
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   try {
+    const url = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx';
+    const response = await fetch(url);
+    const text = await response.text();
+    const all = JSON.parse(text);
+
+    // 1. 接前端傳的日期，格式 115.05.28。沒傳就自動抓資料裡最新一天
     const queryDate = req.query.date;
-    let all = [];
-
-    if (queryDate) {
-      const rocYear = parseInt(queryDate.split('.')[0]);
-      const adYear = rocYear + 1911;
-
-      // 1. 先打歷史庫
-      const historyUrl = `https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransDataHistory.aspx?year=${adYear}&$format=json`;
-      const historyRes = await fetch(historyUrl);
-      const historyType = historyRes.headers.get('content-type');
-
-      if (historyType && historyType.includes('application/json')) {
-        const text = await historyRes.text();
-        const yearData = JSON.parse(text);
-        all = yearData.filter(d => d.交易日期 === queryDate);
-      }
-
-      // 2. 歷史庫沒資料，再打即時庫試試
-      if (all.length === 0) {
-        console.log('歷史庫沒資料，改打即時庫');
-        const realtimeUrl = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx?$format=json';
-        const realtimeRes = await fetch(realtimeUrl);
-        const realtimeText = await realtimeRes.text();
-        const realtimeData = JSON.parse(realtimeText);
-        all = realtimeData.filter(d => d.交易日期 === queryDate);
-      }
-
-    } else {
-      const url = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx?$format=json';
-      const response = await fetch(url);
-      const text = await response.text();
-      all = JSON.parse(text);
-    }
 
     let raw = all.filter(d =>
       d.市場名稱 &&
@@ -44,12 +15,16 @@ export default async function handler(req, res) {
       d.種類代碼 === 'N05'
     );
 
-    if (!queryDate && raw.length > 0) {
+    // 2. 如果有指定日期就篩日期，沒指定就拿最新一天
+    if (queryDate) {
+      raw = raw.filter(d => d.交易日期 === queryDate);
+    } else {
       const dates = [...new Set(raw.map(d => d.交易日期))].sort().reverse();
       const latestDate = dates[0];
       raw = raw.filter(d => d.交易日期 === latestDate);
     }
 
+    // 3. 同市場+同品名，只留第一筆去重
     const seen = new Set();
     const data = raw.filter(d => {
       const key = d.市場名稱.trim() + '_' + d.作物名稱.trim();
@@ -67,9 +42,10 @@ export default async function handler(req, res) {
       交易量: +d.交易量 || 0
     }));
 
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 's-maxage=60'); // 快取縮短，方便切換日期
     res.status(200).json(data);
   } catch (e) {
-    console.error(e);
     res.status(500).json({error: e.message});
   }
 }
