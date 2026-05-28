@@ -3,38 +3,35 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
 
   try {
-    const queryDate = req.query.date; // 115.05.23
+    const queryDate = req.query.date;
     let all = [];
 
     if (queryDate) {
       const rocYear = parseInt(queryDate.split('.')[0]);
       const adYear = rocYear + 1911;
 
-      // 用歷史資料 API，2026年的資料也在這
-      const url = `https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransDataHistory.aspx?year=${adYear}&$format=json`;
-      console.log('歷史API:', url);
+      // 1. 先打歷史庫
+      const historyUrl = `https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransDataHistory.aspx?year=${adYear}&$format=json`;
+      const historyRes = await fetch(historyUrl);
+      const historyType = historyRes.headers.get('content-type');
 
-      const response = await fetch(url);
-      const contentType = response.headers.get('content-type');
-
-      // 農業部沒資料會回 HTML，直接當空陣列
-      if (!contentType ||!contentType.includes('application/json')) {
-        console.log('農業部回非JSON，日期:', queryDate);
-        return res.status(200).json([]);
+      if (historyType && historyType.includes('application/json')) {
+        const text = await historyRes.text();
+        const yearData = JSON.parse(text);
+        all = yearData.filter(d => d.交易日期 === queryDate);
       }
 
-      const text = await response.text();
-      let yearData = [];
-      try {
-        yearData = JSON.parse(text);
-      } catch (e) {
-        return res.status(200).json([]);
+      // 2. 歷史庫沒資料，再打即時庫試試
+      if (all.length === 0) {
+        console.log('歷史庫沒資料，改打即時庫');
+        const realtimeUrl = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx?$format=json';
+        const realtimeRes = await fetch(realtimeUrl);
+        const realtimeText = await realtimeRes.text();
+        const realtimeData = JSON.parse(realtimeText);
+        all = realtimeData.filter(d => d.交易日期 === queryDate);
       }
-
-      all = yearData.filter(d => d.交易日期 === queryDate);
 
     } else {
-      // 沒指定日期用即時 API
       const url = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx?$format=json';
       const response = await fetch(url);
       const text = await response.text();
