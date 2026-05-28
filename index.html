@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>雙北果菜市場行情</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      padding: 20px;
+    }
+   .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+   .subtitle {
+      color: #6e6e73;
+      margin-bottom: 24px;
+    }
+   .toolbar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    input[type="date"], select, button {
+      padding: 10px 16px;
+      font-size: 16px;
+      border: 1px solid #d2d2d7;
+      border-radius: 8px;
+      background: white;
+    }
+    button {
+      background: #0071e3;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0077ed;
+    }
+    button:disabled {
+      background: #d2d2d7;
+      cursor: not-allowed;
+    }
+    table {
+      width: 100%;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid #f5f5f7;
+    }
+    th {
+      background: #f5f5f7;
+      font-weight: 600;
+      font-size: 14px;
+      color: #6e6e73;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+   .loading {
+      text-align: center;
+      padding: 40px;
+      color: #6e6e73;
+    }
+   .price {
+      font-variant-numeric: tabular-nums;
+    }
+   .market {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      background: #f5f5f7;
+    }
+   .market.sanchong { background: #e8f5e9; color: #2e7d32; }
+   .market.banqiao { background: #e3f2fd; color: #1565c0; }
+    @media (max-width: 768px) {
+      table { font-size: 14px; }
+      th, td { padding: 10px 8px; }
+     .hide-mobile { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>雙北果菜市場行情</h1>
+    <p class="subtitle" id="subtitle">載入中...</p>
+    
+    <div class="toolbar">
+      <input type="date" id="datePicker">
+      <select id="marketFilter">
+        <option value="">全部市場</option>
+        <option value="三重">三重果菜</option>
+        <option value="板橋">板橋果菜</option>
+      </select>
+      <button onclick="loadData()">查詢</button>
+      <button onclick="loadToday()">今天</button>
+    </div>
+
+    <div id="content">
+      <div class="loading">載入中...</div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api/fruit';
+    let allData = [];
+
+    function formatROCDate(date) {
+      const year = date.getFullYear() - 1911;
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${year}.${m}.${d}`;
+    }
+
+    function rocToDate(roc) {
+      const [y, m, d] = roc.split('.');
+      return new Date(+y + 1911, +m - 1, +d);
+    }
+
+    async function loadData(date = '') {
+      const content = document.getElementById('content');
+      content.innerHTML = '<div class="loading">載入中...</div>';
+      
+      try {
+        const url = date? `${API_BASE}?date=${date}` : API_BASE;
+        const res = await fetch(url);
+        allData = await res.json();
+        
+        if (allData.length === 0) {
+          content.innerHTML = '<div class="loading">查無資料</div>';
+          document.getElementById('subtitle').textContent = date? `${date} 無資料` : '無資料';
+          return;
+        }
+
+        const tradeDate = allData[0].交易日期;
+        document.getElementById('subtitle').textContent = `交易日期：${tradeDate}　共 ${allData.length} 筆`;
+        document.getElementById('datePicker').value = rocToDate(tradeDate).toISOString().split('T')[0];
+        
+        renderTable();
+      } catch (e) {
+        content.innerHTML = `<div class="loading">載入失敗：${e.message}</div>`;
+      }
+    }
+
+    function renderTable() {
+      const market = document.getElementById('marketFilter').value;
+      const data = market? allData.filter(d => d.市場名稱.includes(market)) : allData;
+      
+      if (data.length === 0) {
+        document.getElementById('content').innerHTML = '<div class="loading">此市場無資料</div>';
+        return;
+      }
+
+      const rows = data.map(d => `
+        <tr>
+          <td><span class="market ${d.市場名稱.includes('三重')? 'sanchong' : 'banqiao'}">${d.市場名稱}</span></td>
+          <td><strong>${d.作物名稱}</strong></td>
+          <td class="price">${d.上價.toFixed(1)}</td>
+          <td class="price">${d.中價.toFixed(1)}</td>
+          <td class="price">${d.下價.toFixed(1)}</td>
+          <td class="price"><strong>${d.平均價.toFixed(1)}</strong></td>
+          <td class="price hide-mobile">${d.交易量.toLocaleString()}</td>
+        </tr>
+      `).join('');
+
+      document.getElementById('content').innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>市場</th>
+              <th>作物</th>
+              <th>上價</th>
+              <th>中價</th>
+              <th>下價</th>
+              <th>平均價</th>
+              <th class="hide-mobile">交易量</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function loadToday() {
+      document.getElementById('datePicker').value = '';
+      loadData();
+    }
+
+    document.getElementById('datePicker').addEventListener('change', e => {
+      if (e.target.value) {
+        const date = new Date(e.target.value);
+        loadData(formatROCDate(date));
+      }
+    });
+
+    document.getElementById('marketFilter').addEventListener('change', renderTable);
+
+    // 預設載入最新資料
+    loadData();
+  </script>
+</body>
+</html>
