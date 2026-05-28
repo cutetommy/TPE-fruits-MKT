@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
