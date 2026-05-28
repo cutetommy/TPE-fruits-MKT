@@ -5,32 +5,33 @@ export default async function handler(req, res) {
   try {
     const queryDate = req.query.date; // 114.05.23
 
-    // 直接帶日期問農業部，不要先抓全部
+    // 農業部 OData 語法：欄位名是 交易日期，值要加單引號
     let url = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx?$format=json';
     if (queryDate) {
-      url += `&$filter=date eq ${queryDate}`;
+      // 重點：交易日期 eq '114.05.23'，欄位名+單引號都要
+      url += `&$filter=交易日期 eq '${encodeURIComponent(queryDate)}'`;
     }
 
-    console.log('Fetching:', url);
+    console.log('Vercel fetch:', url);
     const response = await fetch(url);
     const text = await response.text();
     const all = JSON.parse(text);
 
-    // 1. 只留三重+板橋的果菜 N05
+    // 只留三重+板橋的果菜 N05
     let raw = all.filter(d =>
       d.市場名稱 &&
       (d.市場名稱.includes('三重') || d.市場名稱.includes('板橋')) &&
       d.種類代碼 === 'N05'
     );
 
-    // 2. 沒指定日期就拿最新一天，有指定就不用再 filter 了
+    // 沒指定日期才自己抓最新一天。有帶日期的話農業部已經篩好了
     if (!queryDate && raw.length > 0) {
       const dates = [...new Set(raw.map(d => d.交易日期))].sort().reverse();
       const latestDate = dates[0];
       raw = raw.filter(d => d.交易日期 === latestDate);
     }
 
-    // 3. 同市場+同品名去重
+    // 同市場+同品名去重
     const seen = new Set();
     const data = raw.filter(d => {
       const key = d.市場名稱.trim() + '_' + d.作物名稱.trim();
