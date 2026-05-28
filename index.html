@@ -160,6 +160,7 @@ async function loadData(dateStr){
       const rocDate = `${d.getFullYear()-1911}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
       url = `${API_URL}?date=${rocDate}`;
 }
+console.log('打出去的 URL:', url);
 const res = await fetch(url);
     if(!res.ok) throw new Error('HTTP '+res.status);
     const json = await res.json();
