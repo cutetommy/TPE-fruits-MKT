@@ -264,7 +264,7 @@ function drawPie(){
   data.forEach((d,i)=>{
     const amt = calcAmount(d);
     const angle = (amt/total)*Math.PI*2;
-    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start+angle);
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,start+angle);
     ctx.fillStyle=colors[i];ctx.fill();
     const mid = start+angle/2;
     const x = cx + Math.cos(mid)*(r+15);
