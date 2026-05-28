@@ -1,30 +1,24 @@
+import { kv } from '@vercel/kv';
+
 export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+
   try {
-    const url = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx';
-    const response = await fetch(url);
-    const text = await response.text();
-    const all = JSON.parse(text);
-
-    // 1. 接前端傳的日期，格式 115.05.28。沒傳就自動抓資料裡最新一天
     const queryDate = req.query.date;
+    let raw = [];
 
-    let raw = all.filter(d =>
-      d.市場名稱 &&
-      (d.市場名稱.includes('三重') || d.市場名稱.includes('板橋')) &&
-      d.種類代碼 === 'N05'
-    );
-
-    // 2. 如果有指定日期就篩日期，沒指定就拿最新一天
     if (queryDate) {
-      raw = raw.filter(d => d.交易日期 === queryDate);
+      raw = await kv.get(`fruit:${queryDate}`) || [];
     } else {
-      const dates = [...new Set(raw.map(d => d.交易日期))].sort().reverse();
+      const keys = await kv.keys('fruit:*');
+      const dates = keys.map(k => k.replace('fruit:', '')).sort().reverse();
       const latestDate = dates[0];
-      raw = raw.filter(d => d.交易日期 === latestDate);
+      if (latestDate) {
+        raw = await kv.get(`fruit:${latestDate}`) || [];
+      }
     }
 
-    // 3. 同市場+同品名，只留第一筆去重
     const seen = new Set();
     const data = raw.filter(d => {
       const key = d.市場名稱.trim() + '_' + d.作物名稱.trim();
@@ -42,10 +36,9 @@ export default async function handler(req, res) {
       交易量: +d.交易量 || 0
     }));
 
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', 's-maxage=60'); // 快取縮短，方便切換日期
     res.status(200).json(data);
   } catch (e) {
-    res.status(500).json({error: e.message});
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
 }
