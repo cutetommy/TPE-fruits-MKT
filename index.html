@@ -297,6 +297,9 @@ function drawLine(name){
 
 // ===== 8. 事件 =====
 refreshBtn.onclick = () => loadData(dateSelect.value);
+// 下面加這行，切日期就自動抓資料
+dateSelect.onchange = () => loadData(dateSelect.value);
+
 marketSelect.onchange = searchInput.oninput = render;
 tbody.onclick = e => {
   const tr = e.target.closest('tr');
