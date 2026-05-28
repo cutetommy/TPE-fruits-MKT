@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
   try {
     const url = 'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx';
     const response = await fetch(url);
