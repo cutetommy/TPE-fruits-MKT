@@ -8,18 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#10b981">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2310b981'/%3E%3Ctext x='50' y='58' font-size='50' text-anchor='middle' fill='white' font-family='Arial'%3E🍍%3C/text%3E%3C/svg%3E">
-<link rel="manifest" href='data:application/json,{
-  "name": "新北水果即時行情",
-  "short_name": "水果行情",
-  "start_url": ".",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#10b981",
-  "icons": [
-    {"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%2310b981'/%3E%3Ctext x='96' y='120' font-size='100' text-anchor='middle' fill='white'%3E🍍%3C/text%3E%3C/svg%3E", "sizes": "192x192", "type": "image/svg+xml"},
-    {"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%2310b981'/%3E%3Ctext x='256' y='320' font-size='260' text-anchor='middle' fill='white'%3E🍍%3C/text%3E%3C/svg%3E", "sizes": "512x512", "type": "image/svg+xml"}
-  ]
-}'>
+<link rel="manifest" href='data:application/json,{"name":"新北水果即時行情","short_name":"水果行情","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#10b981","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%2310b981'/%3E%3Ctext x='96' y='120' font-size='100' text-anchor='middle' fill='white'%3E🍍%3C/text%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"}]}'>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;background:#f8fafc;color:#0f172a;line-height:1.5}
@@ -106,27 +95,41 @@ canvas{max-width:100%;height:auto}
     </div>
     <div id="historyResult"></div>
   </div>
-
-  <div class="card" style="font-size:13px;color:#64748b">
-    <b>部署方式：</b><br>
-    1. <b>Vercel</b>：直接把 index.html 拖到 vercel.com/new 即可<br>
-    2. <b>Netlify</b>：拖到 app.netlify.com/drop<br>
-    3. <b>公司內網</b>：放到 Nginx 根目錄，網址就能用<br>
-    <b>資料來源：</b>農業部農產品批發市場交易行情開放資料，每日更新
-  </div>
 </div>
 
 <script>
-// ===== 1. API 串接區塊 =====
-const API_URL = '/api/fruit';
-const MOCK_DATA = [{"作物名稱":"香蕉","平均價":22.5,"交易量":15230},{"作物名稱":"鳳梨","平均價":28.1,"交易量":12300},{"作物名稱":"西瓜","平均價":15.2,"交易量":25600},{"作物名稱":"芒果","平均價":45.8,"交易量":8900},{"作物名稱":"木瓜","平均價":32.4,"交易量":7600},{"作物名稱":"芭樂","平均價":38.9,"交易量":10200},{"作物名稱":"蓮霧","平均價":65.2,"交易量":3400},{"作物名稱":"葡萄","平均價":89.5,"交易量":4200},{"作物名稱":"火龍果","平均價":42.1,"交易量":5800},{"作物名稱":"柚子","平均價":35.6,"交易量":4900}];
+// ===== 1. 修正：先宣告所有 DOM 變數 =====
+const tbody = document.querySelector('#dataTable tbody');
+const apiTip = document.getElementById('apiTip');
+const updateTime = document.getElementById('updateTime');
+const dateStrEl = document.getElementById('dateStr');
+const totalVolume = document.getElementById('totalVolume');
+const totalAmount = document.getElementById('totalAmount');
+const avgPrice = document.getElementById('avgPrice');
+const itemCount = document.getElementById('itemCount');
+const volumeChange = document.getElementById('volumeChange');
+const amountChange = document.getElementById('amountChange');
+const priceChange = document.getElementById('priceChange');
+const marketSelect = document.getElementById('marketSelect');
+const dateSelect = document.getElementById('dateSelect');
+const searchInput = document.getElementById('searchInput');
+const autoUpdate = document.getElementById('autoUpdate');
+const refreshBtn = document.getElementById('refreshBtn');
+const barChart = document.getElementById('barChart');
+const pieChart = document.getElementById('pieChart');
+const lineChart = document.getElementById('lineChart');
+const chartTitle = document.getElementById('chartTitle');
+const installBtn = document.getElementById('installBtn');
 
+// ===== 2. API 串接 =====
+const API_URL = '/api/fruit';
+const MOCK_DATA = [{"作物名稱":"香蕉","平均價":22.5,"交易量":15230,"上價":25,"中價":22,"下價":20},{"作物名稱":"鳳梨","平均價":28.1,"交易量":12300,"上價":30,"中價":28,"下價":26}];
 let allData = [], currentData = [], selectedItem = null;
 
-// ===== 2. PWA 註冊 =====
-if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  const sw = `self.addEventListener('install',e=>e.waitUntil(caches.open('xinbei-v1').then(c=>c.addAll(['./']))));
-  self.addEventListener('fetch',e=>{if(e.request.url.includes('moa.gov.tw')){e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))}else{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))}})`;
+// ===== 3. 修正：Service Worker 只在 https 下註冊 =====
+if('serviceWorker' in navigator && location.protocol === 'https:'){
+  const sw = `self.addEventListener('install',e=>e.waitUntil(caches.open('xinbei-v2').then(c=>c.addAll(['./']))));
+  self.addEventListener('fetch',e=>{if(e.request.url.includes('/api/')){e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)))}else{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))}})`;
   const blob = new Blob([sw],{type:'text/javascript'});
   navigator.serviceWorker.register(URL.createObjectURL(blob));
 }
@@ -137,43 +140,48 @@ if(/iPhone|iPad/.test(navigator.userAgent) &&!window.navigator.standalone){
   installBtn.onclick=()=>alert('iPhone 安裝步驟：\n1. 點下方 Safari 分享按鈕\n2. 選擇「加入主畫面」\n3. 點「新增」即可');
 }
 
-// ===== 3. 工具函數 =====
+// ===== 4. 工具函數 =====
 const fmt = n => n.toLocaleString('zh-TW');
 const fmtWan = n => (n/10000).toFixed(1)+'萬';
 const today = () => new Date().toISOString().split('T')[0];
 const calcAmount = d => d.平均價 * d.交易量;
 
-// ===== 4. 抓資料 =====
+// ===== 5. 抓資料 =====
 async function loadData(dateStr){
   dateSelect.value = dateStr;
   dateStrEl.textContent = dateStr;
+  apiTip.style.display='block';
+  apiTip.textContent='載入中...';
   try{
     const res = await fetch(API_URL);
+    if(!res.ok) throw new Error('HTTP '+res.status);
     const json = await res.json();
-    allData = json.filter(d =>
-      (d.市場名稱.includes('三重') || d.市場名稱.includes('板橋')) &&
-      d.種類代號 === 'N04' &&
-      d.交易日期 === dateStr.replace(/-/g,'/')
-    ).map(d=>({...d, 平均價:+d.平均價, 交易量:+d.交易量}));
-    apiTip.style.display='none';
+    console.log('API 回傳筆數:', json.length, json.slice(0,3));
+
+    if(json.length === 0){
+      apiTip.textContent = 'API 成功但回傳空陣列，今天可能休市。使用示範資料';
+      allData = MOCK_DATA;
+    } else {
+      allData = json.map(d=>({...d, 平均價:+d.平均價||0, 交易量:+d.交易量||0, 上價:+d.上價||0, 中價:+d.中價||0, 下價:+d.下價||0}));
+      apiTip.style.display='none';
+    }
   }catch(e){
-    apiTip.textContent='API 連線失敗，目前顯示示範資料';
-    apiTip.style.display='block';
-    allData = MOCK_DATA.map(d=>({...d, 市場名稱:'三重', 交易日期:dateStr}));
+    console.error(e);
+    apiTip.textContent='API 連線失敗：'+e.message+'，使用示範資料';
+    allData = MOCK_DATA;
   }
   render();
 }
 
-// ===== 5. 畫面渲染 =====
+// ===== 6. 畫面渲染 =====
 function render(){
   const market = marketSelect.value;
   const keyword = searchInput.value;
   currentData = allData.filter(d =>
-    (market==='all' || d.市場名稱.includes(market)) &&
+    (market==='all' || d.市場名稱?.includes(market)) &&
     d.作物名稱.includes(keyword)
   );
 
-  // 統計卡
   const totalVol = currentData.reduce((s,d)=>s+d.交易量,0);
   const totalAmt = currentData.reduce((s,d)=>s+calcAmount(d),0);
   const avgPrc = totalVol? totalAmt/totalVol : 0;
@@ -183,7 +191,6 @@ function render(){
   itemCount.textContent = currentData.length;
   updateTime.textContent = new Date().toLocaleString('zh-TW');
 
-  // 漲跌比對
   const yKey = 'y_'+dateSelect.value;
   const yesterday = localStorage.getItem(yKey);
   if(yesterday){
@@ -194,36 +201,35 @@ function render(){
   }
   localStorage.setItem(yKey, JSON.stringify({vol:totalVol,amt:totalAmt,prc:avgPrc}));
 
-  // 表格
   tbody.innerHTML = currentData.sort((a,b)=>calcAmount(b)-calcAmount(a))
-   .map((d,i)=>{
+  .map((d,i)=>{
       const amt = calcAmount(d);
-      const change = Math.random()*20-10; // 示範：實際應比對昨日
+      const change = (Math.random()*20-10).toFixed(1); // 實際應比對昨日
       return `<tr data-name="${d.作物名稱}">
         <td>${i+1}</td><td>${d.作物名稱}</td>
         <td class="hide-sm">${d.上價||'-'}</td><td class="hide-sm">${d.中價||'-'}</td><td class="hide-sm">${d.下價||'-'}</td>
         <td>${d.平均價.toFixed(1)}</td><td>${fmt(d.交易量)}</td><td>${fmt(Math.round(amt))}</td>
-        <td><span class="badge ${change>=0?'badge-green':'badge-red'}">${change>=0?'↑':'↓'} ${Math.abs(change).toFixed(1)}%</span></td>
+        <td><span class="badge ${change>=0?'badge-green':'badge-red'}">${change>=0?'↑':'↓'} ${Math.abs(change)}%</span></td>
       </tr>`;
     }).join('');
 
-  // 圖表
-  drawBar();
-  drawPie();
+  drawBar(); drawPie();
   if(selectedItem) drawLine(selectedItem);
 }
 
 function setChange(el, now, old){
+  if(!old){el.textContent='';return}
   const diff = ((now-old)/old*100);
   el.textContent = `較昨日 ${diff>=0?'↑':'↓'} ${Math.abs(diff).toFixed(1)}%`;
   el.className = 'label ' + (diff>=0?'positive':'negative');
 }
 
-// ===== 6. Canvas 圖表 =====
+// ===== 7. Canvas 圖表 =====
 function drawBar(){
   const ctx = barChart.getContext('2d'), W=barChart.width, H=barChart.height;
   ctx.clearRect(0,0,W,H);
   const data = currentData.slice(0,10);
+  if(!data.length) return;
   const max = Math.max(...data.map(d=>d.交易量));
   const barH = (H-40)/data.length;
   ctx.font='12px system-ui';
@@ -241,6 +247,7 @@ function drawPie(){
   const ctx = pieChart.getContext('2d'), W=pieChart.width, H=pieChart.height;
   ctx.clearRect(0,0,W,H);
   const data = currentData.slice(0,8);
+  if(!data.length) return;
   const total = data.reduce((s,d)=>s+calcAmount(d),0);
   let start = -Math.PI/2;
   const cx=W/2, cy=H/2, r=100;
@@ -265,10 +272,7 @@ function drawLine(name){
   chartTitle.textContent = name;
   const ctx = lineChart.getContext('2d'), W=lineChart.width, H=lineChart.height;
   ctx.clearRect(0,0,W,H);
-  // 示範：產生30天假資料。實際應改成 fetch 歷史API
-  const data = Array.from({length:30},(_,i)=>({
-    date: i, price: 20+Math.random()*40
-  }));
+  const data = Array.from({length:30},(_,i)=>({date:i, price:20+Math.random()*40}));
   const max = Math.max(...data.map(d=>d.price));
   const min = Math.min(...data.map(d=>d.price));
   const pad=40, w=(W-pad*2)/(data.length-1), h=H-pad*2;
@@ -284,7 +288,7 @@ function drawLine(name){
   ctx.fillText(min.toFixed(1), 5, H-pad);
 }
 
-// ===== 7. 事件 =====
+// ===== 8. 事件 =====
 refreshBtn.onclick = () => loadData(dateSelect.value);
 marketSelect.onchange = searchInput.oninput = render;
 tbody.onclick = e => {
