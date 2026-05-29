@@ -20,23 +20,25 @@ export default async function handler(req, res) {
     const seen = new Set();
     const data = rawArrays
     .flat()
-    .filter(d => d && d.MarketName && d.CropName) // 改這裡
+    .filter(d => d && d.MarketName && d.CropName && d.TransDate) // 加上 TransDate 判斷
     .filter(d => {
-        const key = String(d.MarketName).trim() + '_' + String(d.CropName).trim();
+        // 改這裡：key 加上日期，同一天內才去重
+        const key = `${d.TransDate}_${d.MarketName.trim()}_${d.CropName.trim()}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       })
     .map(d => ({
-        交易日期: d.TransDate || '', // 改這裡
-        市場名稱: String(d.MarketName).trim(), // 改這裡
-        作物名稱: String(d.CropName).trim(), // 改這裡
-        上價: +d.Upper_Price || 0, // 改這裡
-        中價: +d.Middle_Price || 0, // 改這裡
-        下價: +d.Lower_Price || 0, // 改這裡
-        平均價: +d.Avg_Price || 0, // 改這裡
-        交易量: +d.Trans_Quantity || 0 // 改這裡
-      }));
+        交易日期: d.TransDate || '',
+        市場名稱: String(d.MarketName).trim(),
+        作物名稱: String(d.CropName).trim(),
+        上價: +d.Upper_Price || 0,
+        中價: +d.Middle_Price || 0,
+        下價: +d.Lower_Price || 0,
+        平均價: +d.Avg_Price || 0,
+        交易量: +d.Trans_Quantity || 0
+      }))
+    .sort((a, b) => b.交易日期.localeCompare(a.交易日期)); // 加個排序，新到舊
 
     res.status(200).json(data);
   } catch (e) {
