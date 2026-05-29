@@ -131,35 +131,39 @@
     let allData = [];
     let prevData = [];
 
-    async function loadData() {
-      const days = document.getElementById('daysSelect').value;
-      const market = document.getElementById('marketSelect').value;
-      const crop = document.getElementById('cropSearch').value.trim();
+async function loadData() {
+  const days = document.getElementById('daysSelect').value;
+  const market = document.getElementById('marketSelect').value;
+  const crop = document.getElementById('cropSearch').value.trim();
 
-      document.getElementById('loading').style.display = 'block';
-      document.getElementById('tbody').innerHTML = '';
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('loading').textContent = '載入中...';
+  document.getElementById('tbody').innerHTML = '';
 
-      try {
-        // 同時抓今天跟前一天來算漲跌
-        const [curRes, prevRes] = await Promise.all([
-          fetch(`/api/fruit?days=${days}`),
-          fetch(`/api/fruit?days=${+days + 1}`)
-        ]);
+  try {
+    const [curRes, prevRes] = await Promise.all([
+      fetch(`/api/fruit?days=${days}`),
+      fetch(`/api/fruit?days=${+days + 1}`)
+    ]);
 
-        const curData = await curRes.json();
-        const prevDataAll = await prevRes.json();
+    const curData = await curRes.json();
+    const prevDataAll = await prevRes.json();
 
-        // 前一天資料：取最後一筆日期的資料
-        const prevDates = [...new Set(prevDataAll.map(d => d.交易日期))].sort().reverse();
-        prevData = prevDataAll.filter(d => d.交易日期 === prevDates[1]);
+    // 防呆：如果回傳不是陣列就當空陣列
+    allData = Array.isArray(curData)? curData : [];
+    const prev = Array.isArray(prevDataAll)? prevDataAll : [];
 
-        allData = curData;
-        renderAll(market, crop);
+    // 前一天資料：取最後一筆日期的前一個日期
+    const dates = [...new Set(prev.map(d => d.交易日期))].sort().reverse();
+    prevData = dates.length > 1? prev.filter(d => d.交易日期 === dates[1]) : [];
 
-      } catch (e) {
-        document.getElementById('loading').textContent = '載入失敗: ' + e.message;
-      }
-    }
+    renderAll(market, crop);
+
+  } catch (e) {
+    document.getElementById('loading').textContent = '載入失敗: ' + e.message;
+    console.error(e);
+  }
+}
 
     function renderAll(marketFilter, cropFilter) {
       // 篩選
@@ -208,25 +212,35 @@
       el.innerHTML = items + items; // 重複一次讓滾動無縫
     }
 
-    function renderStats() {
-      const today = allData.filter(d => d.交易日期 === allData[0]?.交易日期);
-      const prev = prevData;
+function renderStats() {
+  const dates = [...new Set(allData.map(d => d.交易日期))].sort().reverse();
+  const todayDate = dates[0];
+  const today = allData.filter(d => d.交易日期 === todayDate);
 
-      const todayVol = today.reduce((sum, d) => sum + d.交易量, 0);
-      const prevVol = prev.reduce((sum, d) => sum + d.交易量, 0);
-      const volChange = prevVol? ((todayVol - prevVol) / prevVol * 100).toFixed(1) : 0;
+  if (!today.length) {
+    document.getElementById('todayVol').textContent = '-';
+    document.getElementById('todayAvg').textContent = '-';
+    document.getElementById('todayCount').textContent = '-';
+    return;
+  }
 
-      const todayAvg = today.length? (today.reduce((sum, d) => sum + d.平均價, 0) / today.length).toFixed(1) : 0;
-      const prevAvg = prev.length? (prev.reduce((sum, d) => sum + d.平均價, 0) / prev.length).toFixed(1) : 0;
-      const avgChange = prevAvg? ((todayAvg - prevAvg) / prevAvg * 100).toFixed(1) : 0;
+  const prev = prevData;
 
-      document.getElementById('todayVol').textContent = todayVol.toLocaleString();
-      document.getElementById('todayAvg').textContent = todayAvg;
-      document.getElementById('todayCount').textContent = today.length;
+  const todayVol = today.reduce((sum, d) => sum + d.交易量, 0);
+  const prevVol = prev.reduce((sum, d) => sum + d.交易量, 0);
+  const volChange = prevVol? ((todayVol - prevVol) / prevVol * 100).toFixed(1) : 0;
 
-      setChangeEl('volChange', volChange);
-      setChangeEl('avgChange', avgChange);
-    }
+  const todayAvg = (today.reduce((sum, d) => sum + d.平均價, 0) / today.length).toFixed(1);
+  const prevAvg = prev.length? (prev.reduce((sum, d) => sum + d.平均價, 0) / prev.length).toFixed(1) : 0;
+  const avgChange = prevAvg? ((todayAvg - prevAvg) / prevAvg * 100).toFixed(1) : 0;
+
+  document.getElementById('todayVol').textContent = todayVol.toLocaleString();
+  document.getElementById('todayAvg').textContent = todayAvg;
+  document.getElementById('todayCount').textContent = today.length;
+
+  setChangeEl('volChange', volChange);
+  setChangeEl('avgChange', avgChange);
+}
 
     function setChangeEl(id, change) {
       const el = document.getElementById(id);
