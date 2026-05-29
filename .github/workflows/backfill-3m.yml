@@ -32,10 +32,14 @@ jobs:
             const url = `${base}/?Start_time=${dateStr}&End_time=${dateStr}&TransType=N05&$limit=10000`;
             try {
               const res = await fetch(url);
-              const data = await res.json();
-              // 防呆：如果不是陣列就當沒資料
+              const json = await res.json();
+              
+              // 新版 API: { RS: "OK", Data: [...] }
+              // 舊版 API: 直接是 [...]
+              let data = Array.isArray(json) ? json : json.Data || [];
+              
               if (!Array.isArray(data)) {
-                console.log(`${dateStr}: API回傳非陣列 ${JSON.stringify(data).slice(0,50)}`);
+                console.log(`${dateStr}: 格式異常 ${JSON.stringify(json).slice(0,80)}`);
                 return [];
               }
               return data;
