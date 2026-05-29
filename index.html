@@ -3,85 +3,297 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>台北果菜市場行情</title>
+  <title>台北果菜市場行情儀表板</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { font-family: system-ui; padding: 20px; background: #f5f5f5; }
-    h1 { color: #2c5f2d; }
-    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #2c5f2d; color: white; }
-    tr:nth-child(even) { background: #f9f9f9; }
-    #loading { color: #666; }
-    select { padding: 6px; margin-bottom: 10px; }
+    @keyframes marquee {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+   .marquee-content {
+      animation: marquee 40s linear infinite;
+    }
+   .marquee:hover.marquee-content {
+      animation-play-state: paused;
+    }
   </style>
 </head>
-<body>
-  <h1>台北果菜市場行情</h1>
-  <select id="days" onchange="loadData()">
-    <option value="1">今日</option>
-    <option value="7">近7天</option>
-    <option value="30">近30天</option>
-    <option value="180">近半年</option>
-  </select>
-  
-  <div id="loading">載入中...</div>
-  <table id="table" style="display:none">
-    <thead>
-      <tr>
-        <th>日期</th>
-        <th>市場</th>
-        <th>品項</th>
-        <th>上價</th>
-        <th>中價</th>
-        <th>下價</th>
-        <th>均價</th>
-        <th>交易量</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
+<body class="bg-gray-50">
+  <div class="max-w-7xl mx-auto p-4">
+
+    <!-- Header -->
+    <div class="mb-6">
+      <h1 class="text-3xl font-bold text-gray-900">台北果菜市場行情</h1>
+      <p class="text-gray-500 text-sm mt-1">資料來源：農業部農產品交易行情站</p>
+    </div>
+
+    <!-- 今日行情跑馬燈 -->
+    <div class="bg-gradient-to-r from-emerald-600 to-green-600 rounded-xl shadow-lg mb-6 overflow-hidden">
+      <div class="px-4 py-2 bg-black/10 text-white text-sm font-semibold">今日熱門品項行情</div>
+      <div class="marquee py-3 overflow-hidden whitespace-nowrap">
+        <div id="marquee" class="marquee-content inline-block text-white text-sm"></div>
+      </div>
+    </div>
+
+    <!-- 今日統計卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="bg-white rounded-xl shadow p-5">
+        <div class="text-gray-500 text-sm">今日總交易量</div>
+        <div class="flex items-baseline gap-2 mt-2">
+          <span id="todayVol" class="text-2xl font-bold text-gray-900">-</span>
+          <span class="text-sm text-gray-500">公斤</span>
+          <span id="volChange" class="text-sm font-semibold"></span>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow p-5">
+        <div class="text-gray-500 text-sm">今日平均價格</div>
+        <div class="flex items-baseline gap-2 mt-2">
+          <span id="todayAvg" class="text-2xl font-bold text-gray-900">-</span>
+          <span class="text-sm text-gray-500">元/公斤</span>
+          <span id="avgChange" class="text-sm font-semibold"></span>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl shadow p-5">
+        <div class="text-gray-500 text-sm">上架品項數</div>
+        <div class="flex items-baseline gap-2 mt-2">
+          <span id="todayCount" class="text-2xl font-bold text-gray-900">-</span>
+          <span class="text-sm text-gray-500">種</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 篩選器 -->
+    <div class="bg-white rounded-xl shadow p-5 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">日期區間</label>
+          <select id="daysSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+            <option value="1">今日</option>
+            <option value="7" selected>近 7 天</option>
+            <option value="30">近 30 天</option>
+            <option value="60">近 60 天</option>
+            <option value="90">近 90 天</option>
+            <option value="180">近 180 天</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">市場</label>
+          <select id="marketSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+            <option value="">全部市場</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">作物名稱</label>
+          <input id="cropSearch" type="text" placeholder="輸入關鍵字..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+        </div>
+        <div class="flex items-end">
+          <button onclick="loadData()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition">
+            套用篩選
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 圖表預留區塊 -->
+    <div id="chartSection" class="bg-white rounded-xl shadow p-5 mb-6 hidden">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">價格走勢圖</h3>
+      <canvas id="priceChart" height="80"></canvas>
+    </div>
+
+    <!-- 資料表格 -->
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+        <h3 class="text-lg font-semibold text-gray-900">詳細行情</h3>
+        <span id="rowCount" class="text-sm text-gray-500"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-600">
+            <tr>
+              <th class="px-4 py-3 text-left font-medium">日期</th>
+              <th class="px-4 py-3 text-left font-medium">市場</th>
+              <th class="px-4 py-3 text-left font-medium">品項</th>
+              <th class="px-4 py-3 text-right font-medium">上價</th>
+              <th class="px-4 py-3 text-right font-medium">中價</th>
+              <th class="px-4 py-3 text-right font-medium">下價</th>
+              <th class="px-4 py-3 text-right font-medium">均價</th>
+              <th class="px-4 py-3 text-right font-medium">漲跌</th>
+              <th class="px-4 py-3 text-right font-medium">交易量</th>
+            </tr>
+          </thead>
+          <tbody id="tbody" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+      <div id="loading" class="text-center py-10 text-gray-500">載入中...</div>
+    </div>
 
   <script>
+    let allData = [];
+    let prevData = [];
+
     async function loadData() {
-      const days = document.getElementById('days').value;
-      const loading = document.getElementById('loading');
-      const table = document.getElementById('table');
-      const tbody = document.getElementById('tbody');
-      
-      loading.style.display = 'block';
-      table.style.display = 'none';
-      tbody.innerHTML = '';
-      
+      const days = document.getElementById('daysSelect').value;
+      const market = document.getElementById('marketSelect').value;
+      const crop = document.getElementById('cropSearch').value.trim();
+
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('tbody').innerHTML = '';
+
       try {
-        const res = await fetch(`/api/fruit?days=${days}`);
-        const data = await res.json();
-        
-        if (!Array.isArray(data)) throw new Error('API 回傳格式錯誤');
-        
-        data.forEach(d => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${d.交易日期}</td>
-            <td>${d.市場名稱}</td>
-            <td>${d.作物名稱}</td>
-            <td>${d.上價}</td>
-            <td>${d.中價}</td>
-            <td>${d.下價}</td>
-            <td>${d.平均價}</td>
-            <td>${d.交易量}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-        
-        loading.style.display = 'none';
-        table.style.display = 'table';
-        
+        // 同時抓今天跟前一天來算漲跌
+        const [curRes, prevRes] = await Promise.all([
+          fetch(`/api/fruit?days=${days}`),
+          fetch(`/api/fruit?days=${+days + 1}`)
+        ]);
+
+        const curData = await curRes.json();
+        const prevDataAll = await prevRes.json();
+
+        // 前一天資料：取最後一筆日期的資料
+        const prevDates = [...new Set(prevDataAll.map(d => d.交易日期))].sort().reverse();
+        prevData = prevDataAll.filter(d => d.交易日期 === prevDates[1]);
+
+        allData = curData;
+        renderAll(market, crop);
+
       } catch (e) {
-        loading.textContent = '載入失敗: ' + e.message;
+        document.getElementById('loading').textContent = '載入失敗: ' + e.message;
       }
     }
-    
+
+    function renderAll(marketFilter, cropFilter) {
+      // 篩選
+      let data = allData;
+      if (marketFilter) data = data.filter(d => d.市場名稱 === marketFilter);
+      if (cropFilter) data = data.filter(d => d.作物名稱.includes(cropFilter));
+
+      // 1. 渲染跑馬燈：今日資料
+      renderMarquee(allData.filter(d => d.交易日期 === allData[0]?.交易日期));
+
+      // 2. 渲染統計卡片
+      renderStats();
+
+      // 3. 渲染表格
+      renderTable(data);
+
+      // 4. 更新市場下拉選單
+      updateMarketOptions();
+
+      document.getElementById('loading').style.display = 'none';
+    }
+
+    function renderMarquee(todayData) {
+      const el = document.getElementById('marquee');
+      if (!todayData.length) {
+        el.innerHTML = '今日休市';
+        return;
+      }
+
+      // 取前20個品項 + 算漲跌
+      const items = todayData.slice(0, 20).map(d => {
+        const prev = prevData.find(p => p.市場名稱 === d.市場名稱 && p.作物名稱 === d.作物名稱);
+        let change = 0;
+        if (prev && prev.平均價 > 0) {
+          change = ((d.平均價 - prev.平均價) / prev.平均價 * 100).toFixed(1);
+        }
+        const color = change > 0? 'text-red-300' : change < 0? 'text-green-300' : 'text-gray-300';
+        const arrow = change > 0? '▲' : change < 0? '▼' : '—';
+
+        return `<span class="mx-6">
+          ${d.作物名稱} ${d.平均價}元
+          <span class="${color}">${arrow}${Math.abs(change)}%</span>
+        </span>`;
+      }).join('');
+
+      el.innerHTML = items + items; // 重複一次讓滾動無縫
+    }
+
+    function renderStats() {
+      const today = allData.filter(d => d.交易日期 === allData[0]?.交易日期);
+      const prev = prevData;
+
+      const todayVol = today.reduce((sum, d) => sum + d.交易量, 0);
+      const prevVol = prev.reduce((sum, d) => sum + d.交易量, 0);
+      const volChange = prevVol? ((todayVol - prevVol) / prevVol * 100).toFixed(1) : 0;
+
+      const todayAvg = today.length? (today.reduce((sum, d) => sum + d.平均價, 0) / today.length).toFixed(1) : 0;
+      const prevAvg = prev.length? (prev.reduce((sum, d) => sum + d.平均價, 0) / prev.length).toFixed(1) : 0;
+      const avgChange = prevAvg? ((todayAvg - prevAvg) / prevAvg * 100).toFixed(1) : 0;
+
+      document.getElementById('todayVol').textContent = todayVol.toLocaleString();
+      document.getElementById('todayAvg').textContent = todayAvg;
+      document.getElementById('todayCount').textContent = today.length;
+
+      setChangeEl('volChange', volChange);
+      setChangeEl('avgChange', avgChange);
+    }
+
+    function setChangeEl(id, change) {
+      const el = document.getElementById(id);
+      const num = parseFloat(change);
+      if (num > 0) {
+        el.className = 'text-sm font-semibold text-red-500';
+        el.textContent = `▲ ${num}%`;
+      } else if (num < 0) {
+        el.className = 'text-sm font-semibold text-green-600';
+        el.textContent = `▼ ${Math.abs(num)}%`;
+      } else {
+        el.className = 'text-sm font-semibold text-gray-400';
+        el.textContent = '— 0%';
+      }
+    }
+
+    function renderTable(data) {
+      const tbody = document.getElementById('tbody');
+      document.getElementById('rowCount').textContent = `共 ${data.length} 筆`;
+
+      tbody.innerHTML = data.map(d => {
+        const prev = prevData.find(p => p.市場名稱 === d.市場名稱 && p.作物名稱 === d.作物名稱);
+        let changeHtml = '<span class="text-gray-400">—</span>';
+
+        if (prev && prev.平均價 > 0) {
+          const change = ((d.平均價 - prev.平均價) / prev.平均價 * 100).toFixed(1);
+          if (change > 0) changeHtml = `<span class="text-red-500 font-semibold">▲ ${change}%</span>`;
+          else if (change < 0) changeHtml = `<span class="text-green-600 font-semibold">▼ ${Math.abs(change)}%</span>`;
+        }
+
+        return `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-gray-900">${d.交易日期}</td>
+            <td class="px-4 py-3 text-gray-600">${d.市場名稱}</td>
+            <td class="px-4 py-3 font-medium text-gray-900">${d.作物名稱}</td>
+            <td class="px-4 py-3 text-right text-gray-900">${d.上價}</td>
+            <td class="px-4 py-3 text-right text-gray-900">${d.中價}</td>
+            <td class="px-4 py-3 text-right text-gray-900">${d.下價}</td>
+            <td class="px-4 py-3 text-right font-semibold text-gray-900">${d.平均價}</td>
+            <td class="px-4 py-3 text-right">${changeHtml}</td>
+            <td class="px-4 py-3 text-right text-gray-600">${d.交易量.toLocaleString()}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateMarketOptions() {
+      const markets = [...new Set(allData.map(d => d.市場名稱))].sort();
+      const select = document.getElementById('marketSelect');
+      const cur = select.value;
+      select.innerHTML = '<option value="">全部市場</option>' +
+        markets.map(m => `<option value="${m}" ${m===cur?'selected':''}>${m}</option>`).join('');
+    }
+
+    // 初始載入
     loadData();
+
+    // 篩選器變更自動套用
+    document.getElementById('daysSelect').addEventListener('change', loadData);
+    document.getElementById('marketSelect').addEventListener('change', () => renderAll(
+      document.getElementById('marketSelect').value,
+      document.getElementById('cropSearch').value.trim()
+    ));
+    document.getElementById('cropSearch').addEventListener('input', () => renderAll(
+      document.getElementById('marketSelect').value,
+      document.getElementById('cropSearch').value.trim()
+    ));
   </script>
 </body>
 </html>
