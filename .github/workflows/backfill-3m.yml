@@ -1,10 +1,10 @@
-name: Backfill 三重 3個月資料
+name: Backfill SanChong Data
 
 on:
   workflow_dispatch:
     inputs:
       days:
-        description: '抓幾天前到今天'
+        description: 'Days to backfill'
         required: true
         default: '90'
 
@@ -12,11 +12,10 @@ jobs:
   backfill:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
     steps:
-      - name: Backfill 三重果菜資料到 Vercel KV
+      - name: Run backfill script
         run: |
-          node << 'EOF'
+          node <<'EOF'
           const KV_URL = process.env.KV_REST_API_URL;
           const KV_TOKEN = process.env.KV_REST_API_TOKEN;
           
@@ -26,114 +25,29 @@ jobs:
             const d = String(date.getDate()).padStart(2, '0');
             return `${y}.${m}.${d}`;
           };
-
-          async function fetchAgriRange(startDate, endDate) {
-            const base = 'https://data.moa.gov.tw/api/v1/AgriProductsTransType';
-            let all = [];
-            let skip = 0;
-            const limit = 5000;
-
-            while (true) {
-              const url = `${base}/?Start_time=${startDate}&End_time=${endDate}&TransType=N05&$limit=${limit}&$skip=${skip}`;
-              console.log(`抓取 ${startDate}~${endDate}, skip=${skip}`);
-              const res = await fetch(url);
-              if (!res.ok) throw new Error(`農業部 HTTP ${res.status}`);
-              const data = await res.json();
-              if (data.length === 0) break;
-              all = all.concat(data);
-              console.log(`累積 ${all.length} 筆`);
-              if (data.length < limit) break;
-              skip += limit;
-              await new Promise(r => setTimeout(r, 300));
-            }
-            return all;
-          }
-
-          async function setKV(key, value) {
-            const res = await fetch(`${KV_URL}/set/${key}`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${KV_TOKEN}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(value)
-            });
-            if (!res.ok) console.error(`KV寫入失敗: ${key}`);
-            await fetch(`${KV_URL}/expire/${key}/17280000`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${KV_TOKEN}` }
-            });
-          }
-
+          
           async function main() {
             const days = parseInt('${{ github.event.inputs.days }}') || 90;
             const end = new Date();
             const start = new Date();
             start.setDate(start.getDate() - days);
-            
             const startStr = toMinguo(start);
             const endStr = toMinguo(end);
             
-            console.log(`開始抓 ${startStr} ~ ${endStr} 三重資料`);
+            const base = 'https://data.moa.gov.tw/api/v1/AgriProductsTransType';
+            let all = [];
+            let skip = 0;
             
-            const all = await fetchAgriRange(startStr, endStr);
-            console.log(`總共抓到 ${all.length} 筆 N05 資料`);
-            
-            const sanChongAll = all.filter(d =>
-              d.MarketName && d.MarketName.includes('三重')
-            );
-            console.log(`其中三重市場 ${sanChongAll.length} 筆`);
-            
-            for (let i = 0; i <= days; i++) {
-              const date = new Date();
-              date.setDate(date.getDate() - i);
-              const queryDate = toMinguo(date);
-              
-              if (date.getDay() === 1) {
-                const empty = { 休市: true, 市場名稱: '三重果菜市場', 交易日期: queryDate, data: [] };
-                await setKV(`fruit:sc:${queryDate}`, empty);
-                console.log(`${queryDate}: 休市`);
-                continue;
-              }
-
-              const raw = sanChongAll.filter(d => d.TransDate === queryDate);
-              
-              const seen = new Set();
-              const data = raw.filter(d => {
-                const key = d.CropName.trim();
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-              }).map(d => ({
-                交易日期: d.TransDate,
-                市場名稱: '三重果菜市場',
-                作物名稱: d.CropName.trim(),
-                上價: +d.Upper_Price || 0,
-                中價: +d.Middle_Price || 0,
-                下價: +d.Lower_Price || 0,
-                平均價: +d.Avg_Price || 0,
-                交易量: +d.Trans_Quantity || 0
-              }));
-
-              const result = { 
-                休市: data.length === 0, 
-                市場名稱: '三重果菜市場', 
-                交易日期: queryDate, 
-                data 
-              };
-
-              await setKV(`fruit:sc:${queryDate}`, result);
-              console.log(`${queryDate}: ${data.length}筆`);
+            while (true) {
+              const url = `${base}/?Start_time=${startStr}&End_time=${endStr}&TransType=N05&$limit=5000&$skip=${skip}`;
+              console.log('Fetching skip=' + skip);
+              const res = await fetch(url);
+              const data = await res.json();
+              if (data.length === 0) break;
+              all = all.concat(data);
+              if (data.length < 5000) break;
+              skip += 5000;
+              await new Promise(r => setTimeout(r, 300));
             }
             
-            console.log('全部完成');
-          }
-
-          main().catch(e => {
-            console.error(e);
-            process.exit(1);
-          });
-          EOF
-        env:
-          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
-          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+            console.log('Total N
