@@ -1,76 +1,20 @@
-name: Backfill 三重 90天
-
-on:
-  workflow_dispatch:
-
+name: debug
+on: { workflow_dispatch: {} }
 jobs:
-  backfill:
+  debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     steps:
-      - name: Backfill
-        run: |
-          node <<'EOF'
-          const U = process.env.U;
-          const T = process.env.T;
-          
-          const toMinguo = d => `${d.getFullYear()-1911}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
-          
-          for(let i=0; i<90; i++) {
-            const dt = new Date();
-            dt.setDate(dt.getDate() - i);
-            const qs = toMinguo(dt);
-            
-            if(dt.getDay() === 1) {
-              await fetch(`${U}/set/fruit:sc:${qs}`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${T}` },
-                body: JSON.stringify({休市:true,交易日期:qs,data:[]})
-              });
-              console.log(qs + ' 休市');
-              continue;
-            }
-            
-            const url = `https://data.moa.gov.tw/api/v1/AgriProductsTransType/?Start_time=${qs}&End_time=${qs}&$limit=20000`;
-            const res = await fetch(url).then(r => r.json());
-            const all = res.Data || [];
-            
-            // 關鍵：三重代碼是 109
-            const sc = all.filter(x => x.MarketCode === '109' && x.TransType === 'N05');
-            
-            const map = new Map();
-            sc.forEach(x => {
-              const name = x.CropName?.trim();
-              if(name && !map.has(name)) {
-                map.set(name, {
-                  作物名稱: name,
-                  上價: +x.Upper_Price || 0,
-                  中價: +x.Middle_Price || 0,
-                  下價: +x.Lower_Price || 0,
-                  平均價: +x.Avg_Price || 0,
-                  交易量: +x.Trans_Quantity || 0
-                });
-              }
-            });
-            
-            const data = Array.from(map.values());
-            
-            await fetch(`${U}/set/fruit:sc:${qs}`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${T}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                休市: false,
-                市場名稱: '三重果菜市場',
-                交易日期: qs,
-                data: data
-              })
-            });
-            
-            console.log(qs + ': ' + data.length + '筆');
-            await new Promise(r => setTimeout(r, 600));
-          }
-          console.log('完成');
-          EOF
-        env:
-          U: ${{ secrets.KV_REST_API_URL }}
-          T: ${{ secrets.KV_REST_API_TOKEN }}
+      - run: |
+          node -e "
+          (async()=>{
+            const date='115.05.29';
+            const url=\`https://data.moa.gov.tw/api/v1/AgriProductsTransType/?Start_time=\${date}&End_time=\${date}&\$limit=5\`;
+            const res=await fetch(url).then(r=>r.json());
+            const data=res.Data||res||[];
+            console.log('總筆數:', data.length);
+            console.log('第一筆完整資料:', JSON.stringify(data[0],null,2));
+            console.log('所有 MarketCode:', [...new Set(data.map(x=>x.MarketCode))].slice(0,20));
+            console.log('所有 MarketName:', [...new Set(data.map(x=>x.MarketName))].slice(0,20));
+            console.log('三重相關:', data.filter(x=>JSON.stringify(x).includes('三重')).length);
+          })()
+          "
