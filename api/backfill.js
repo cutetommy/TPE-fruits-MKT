@@ -17,14 +17,18 @@ export default async function handler(req, res) {
     const key = `fruit:${dateStr}`;
 
     try {
-      // 重點：用 MarketName，不是 MarketCode。中文要用 encodeURIComponent
-      const url = `https://data.moa.gov.tw/api/v1/AgriProductsTransType/?Start_time=${rocDate}&End_time=${rocDate}&MarketName=${encodeURIComponent('三重')}&MarketName=${encodeURIComponent('板橋')}`;
-      
-      const data = await fetch(url).then(r => r.json()).then(j => j.Data || []);
+      // 加 TransType=N05 只抓水果，limit=5000 確保不截斷
+      const url = `https://data.moa.gov.tw/api/v1/AgriProductsTransType/?Start_time=${rocDate}&End_time=${rocDate}&TransType=N05&limit=5000`;
+      const allData = await fetch(url).then(r => r.json()).then(j => j.Data || []);
+
+      // 只保留三重區 + 板橋區
+      const data = allData.filter(item => 
+        item.MarketName === '三重區' || item.MarketName === '板橋區'
+      );
 
       await kv.set(key, data);
       await kv.expire(key, 60 * 60 * 24 * 200);
-      results.push(`✅ ${key}: ${data.length}筆`);
+      results.push(`✅ ${key}: 水果全市場 ${allData.length}筆 → 三重板橋 ${data.length}筆`);
 
     } catch (e) {
       results.push(`✗ ${dateStr}: ${e.message}`);
