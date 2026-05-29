@@ -88,7 +88,7 @@
         </div>
         <div class="flex items-end">
           <button onclick="loadData()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition">
-            套用篩選
+            重新載入
           </button>
         </div>
       </div>
@@ -106,9 +106,9 @@
         <h3 class="text-lg font-semibold text-gray-900">詳細行情</h3>
         <span id="rowCount" class="text-sm text-gray-500"></span>
       </div>
-      <div class="overflow-x-auto">
+      <div class="overflow-auto max-h-[600px]">
         <table class="w-full text-sm">
-          <thead class="bg-gray-50 text-gray-600">
+          <thead class="bg-gray-50 text-gray-600 sticky top-0">
             <tr>
               <th class="px-4 py-3 text-left font-medium">日期</th>
               <th class="px-4 py-3 text-left font-medium">市場</th>
@@ -125,76 +125,75 @@
         </table>
       </div>
       <div id="loading" class="text-center py-10 text-gray-500">載入中...</div>
+      <div id="pagination" class="px-5 py-3 border-t border-gray-200 flex justify-between items-center"></div>
     </div>
+
+  </div>
 
   <script>
     let allData = [];
     let prevData = [];
+    let filteredData = [];
+    let currentPage = 1;
+    const pageSize = 50;
 
-async function loadData() {
-  const days = document.getElementById('daysSelect').value;
-  const market = document.getElementById('marketSelect').value;
-  const crop = document.getElementById('cropSearch').value.trim();
+    async function loadData() {
+      const days = document.getElementById('daysSelect').value;
+      const market = document.getElementById('marketSelect').value;
+      const crop = document.getElementById('cropSearch').value.trim();
 
-  document.getElementById('loading').style.display = 'block';
-  document.getElementById('loading').textContent = '載入中...';
-  document.getElementById('tbody').innerHTML = '';
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('loading').textContent = '載入中...';
+      document.getElementById('tbody').innerHTML = '';
 
-  try {
-    const [curRes, prevRes] = await Promise.all([
-      fetch(`/api/fruit?days=${days}`),
-      fetch(`/api/fruit?days=${+days + 1}`)
-    ]);
+      try {
+        const [curRes, prevRes] = await Promise.all([
+          fetch(`/api/fruit?days=${days}`),
+          fetch(`/api/fruit?days=${+days + 1}`)
+        ]);
 
-    const curData = await curRes.json();
-    const prevDataAll = await prevRes.json();
+        const curData = await curRes.json();
+        const prevDataAll = await prevRes.json();
 
-    // 防呆：如果回傳不是陣列就當空陣列
-    allData = Array.isArray(curData)? curData : [];
-    const prev = Array.isArray(prevDataAll)? prevDataAll : [];
+        allData = Array.isArray(curData)? curData : [];
+        const prev = Array.isArray(prevDataAll)? prevDataAll : [];
 
-    // 前一天資料：取最後一筆日期的前一個日期
-    const dates = [...new Set(prev.map(d => d.交易日期))].sort().reverse();
-    prevData = dates.length > 1? prev.filter(d => d.交易日期 === dates[1]) : [];
+        const dates = [...new Set(prev.map(d => d.交易日期))].sort().reverse();
+        prevData = dates.length > 1? prev.filter(d => d.交易日期 === dates[1]) : [];
 
-    renderAll(market, crop);
+        currentPage = 1;
+        renderAll(market, crop);
 
-  } catch (e) {
-    document.getElementById('loading').textContent = '載入失敗: ' + e.message;
-    console.error(e);
-  }
-}
+      } catch (e) {
+        document.getElementById('loading').textContent = '載入失敗: ' + e.message;
+        console.error(e);
+      }
+    }
 
     function renderAll(marketFilter, cropFilter) {
-      // 篩選
-      let data = allData;
-      if (marketFilter) data = data.filter(d => d.市場名稱 === marketFilter);
-      if (cropFilter) data = data.filter(d => d.作物名稱.includes(cropFilter));
+      filteredData = allData;
+      if (marketFilter) filteredData = filteredData.filter(d => d.市場名稱 === marketFilter);
+      if (cropFilter) filteredData = filteredData.filter(d => d.作物名稱.includes(cropFilter));
 
-      // 1. 渲染跑馬燈：今日資料
-      renderMarquee(allData.filter(d => d.交易日期 === allData[0]?.交易日期));
-
-      // 2. 渲染統計卡片
+      renderMarquee();
       renderStats();
-
-      // 3. 渲染表格
-      renderTable(data);
-
-      // 4. 更新市場下拉選單
+      renderTable();
       updateMarketOptions();
 
       document.getElementById('loading').style.display = 'none';
     }
 
-    function renderMarquee(todayData) {
+    function renderMarquee() {
+      const dates = [...new Set(allData.map(d => d.交易日期))].sort().reverse();
+      const todayData = allData.filter(d => d.交易日期 === dates[0]);
+
       const el = document.getElementById('marquee');
       if (!todayData.length) {
-        el.innerHTML = '今日休市';
+        el.innerHTML = '今日休市或尚無資料';
         return;
       }
 
-      // 取前20個品項 + 算漲跌
-      const items = todayData.slice(0, 20).map(d => {
+      const items = todayData.slice(0, 30).map(d => {
         const prev = prevData.find(p => p.市場名稱 === d.市場名稱 && p.作物名稱 === d.作物名稱);
         let change = 0;
         if (prev && prev.平均價 > 0) {
@@ -202,45 +201,37 @@ async function loadData() {
         }
         const color = change > 0? 'text-red-300' : change < 0? 'text-green-300' : 'text-gray-300';
         const arrow = change > 0? '▲' : change < 0? '▼' : '—';
-
-        return `<span class="mx-6">
-          ${d.作物名稱} ${d.平均價}元
-          <span class="${color}">${arrow}${Math.abs(change)}%</span>
-        </span>`;
+        return `<span class="mx-6">${d.作物名稱} ${d.平均價}元 <span class="${color}">${arrow}${Math.abs(change)}%</span></span>`;
       }).join('');
 
-      el.innerHTML = items + items; // 重複一次讓滾動無縫
+      el.innerHTML = items + items;
     }
 
-function renderStats() {
-  const dates = [...new Set(allData.map(d => d.交易日期))].sort().reverse();
-  const todayDate = dates[0];
-  const today = allData.filter(d => d.交易日期 === todayDate);
+    function renderStats() {
+      const dates = [...new Set(allData.map(d => d.交易日期))].sort().reverse();
+      const today = allData.filter(d => d.交易日期 === dates[0]);
 
-  if (!today.length) {
-    document.getElementById('todayVol').textContent = '-';
-    document.getElementById('todayAvg').textContent = '-';
-    document.getElementById('todayCount').textContent = '-';
-    return;
-  }
+      if (!today.length) {
+        ['todayVol', 'todayAvg', 'todayCount'].forEach(id => document.getElementById(id).textContent = '-');
+        ['volChange', 'avgChange'].forEach(id => document.getElementById(id).textContent = '');
+        return;
+      }
 
-  const prev = prevData;
+      const todayVol = today.reduce((sum, d) => sum + d.交易量, 0);
+      const prevVol = prevData.reduce((sum, d) => sum + d.交易量, 0);
+      const volChange = prevVol? ((todayVol - prevVol) / prevVol * 100).toFixed(1) : 0;
 
-  const todayVol = today.reduce((sum, d) => sum + d.交易量, 0);
-  const prevVol = prev.reduce((sum, d) => sum + d.交易量, 0);
-  const volChange = prevVol? ((todayVol - prevVol) / prevVol * 100).toFixed(1) : 0;
+      const todayAvg = (today.reduce((sum, d) => sum + d.平均價, 0) / today.length).toFixed(1);
+      const prevAvg = prevData.length? (prevData.reduce((sum, d) => sum + d.平均價, 0) / prevData.length).toFixed(1) : 0;
+      const avgChange = prevAvg? ((todayAvg - prevAvg) / prevAvg * 100).toFixed(1) : 0;
 
-  const todayAvg = (today.reduce((sum, d) => sum + d.平均價, 0) / today.length).toFixed(1);
-  const prevAvg = prev.length? (prev.reduce((sum, d) => sum + d.平均價, 0) / prev.length).toFixed(1) : 0;
-  const avgChange = prevAvg? ((todayAvg - prevAvg) / prevAvg * 100).toFixed(1) : 0;
+      document.getElementById('todayVol').textContent = todayVol.toLocaleString();
+      document.getElementById('todayAvg').textContent = todayAvg;
+      document.getElementById('todayCount').textContent = today.length;
 
-  document.getElementById('todayVol').textContent = todayVol.toLocaleString();
-  document.getElementById('todayAvg').textContent = todayAvg;
-  document.getElementById('todayCount').textContent = today.length;
-
-  setChangeEl('volChange', volChange);
-  setChangeEl('avgChange', avgChange);
-}
+      setChangeEl('volChange', volChange);
+      setChangeEl('avgChange', avgChange);
+    }
 
     function setChangeEl(id, change) {
       const el = document.getElementById(id);
@@ -257,20 +248,23 @@ function renderStats() {
       }
     }
 
-    function renderTable(data) {
+    function renderTable() {
       const tbody = document.getElementById('tbody');
-      document.getElementById('rowCount').textContent = `共 ${data.length} 筆`;
+      const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
+      const start = (currentPage - 1) * pageSize;
+      const end = start + pageSize;
+      const pageData = filteredData.slice(start, end);
 
-      tbody.innerHTML = data.map(d => {
+      document.getElementById('rowCount').textContent = `共 ${filteredData.length} 筆`;
+
+      tbody.innerHTML = pageData.map(d => {
         const prev = prevData.find(p => p.市場名稱 === d.市場名稱 && p.作物名稱 === d.作物名稱);
         let changeHtml = '<span class="text-gray-400">—</span>';
-
         if (prev && prev.平均價 > 0) {
           const change = ((d.平均價 - prev.平均價) / prev.平均價 * 100).toFixed(1);
           if (change > 0) changeHtml = `<span class="text-red-500 font-semibold">▲ ${change}%</span>`;
           else if (change < 0) changeHtml = `<span class="text-green-600 font-semibold">▼ ${Math.abs(change)}%</span>`;
         }
-
         return `
           <tr class="hover:bg-gray-50">
             <td class="px-4 py-3 text-gray-900">${d.交易日期}</td>
@@ -285,6 +279,29 @@ function renderStats() {
           </tr>
         `;
       }).join('');
+
+      renderPagination(totalPages);
+    }
+
+    function renderPagination(totalPages) {
+      const paginationEl = document.getElementById('pagination');
+      paginationEl.innerHTML = `
+        <button onclick="changePage(-1)" ${currentPage === 1? 'disabled' : ''}
+          class="px-3 py-1 text-sm border rounded-lg disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50">
+          上一頁
+        </button>
+        <span class="text-sm text-gray-600">第 ${currentPage} / ${totalPages} 頁</span>
+        <button onclick="changePage(1)" ${currentPage === totalPages? 'disabled' : ''}
+          class="px-3 py-1 text-sm border rounded-lg disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50">
+          下一頁
+        </button>
+      `;
+    }
+
+    function changePage(dir) {
+      const totalPages = Math.ceil(filteredData.length / pageSize);
+      currentPage = Math.max(1, Math.min(totalPages, currentPage + dir));
+      renderTable();
     }
 
     function updateMarketOptions() {
@@ -292,22 +309,26 @@ function renderStats() {
       const select = document.getElementById('marketSelect');
       const cur = select.value;
       select.innerHTML = '<option value="">全部市場</option>' +
-        markets.map(m => `<option value="${m}" ${m===cur?'selected':''}>${m}</option>`).join('');
+        markets.map(m => `<option value="${m}" ${m === cur? 'selected' : ''}>${m}</option>`).join('');
     }
 
     // 初始載入
     loadData();
-
-    // 篩選器變更自動套用
     document.getElementById('daysSelect').addEventListener('change', loadData);
-    document.getElementById('marketSelect').addEventListener('change', () => renderAll(
-      document.getElementById('marketSelect').value,
-      document.getElementById('cropSearch').value.trim()
-    ));
-    document.getElementById('cropSearch').addEventListener('input', () => renderAll(
-      document.getElementById('marketSelect').value,
-      document.getElementById('cropSearch').value.trim()
-    ));
+    document.getElementById('marketSelect').addEventListener('change', () => {
+      currentPage = 1;
+      renderAll(
+        document.getElementById('marketSelect').value,
+        document.getElementById('cropSearch').value.trim()
+      );
+    });
+    document.getElementById('cropSearch').addEventListener('input', () => {
+      currentPage = 1;
+      renderAll(
+        document.getElementById('marketSelect').value,
+        document.getElementById('cropSearch').value.trim()
+      );
+    });
   </script>
 </body>
 </html>
