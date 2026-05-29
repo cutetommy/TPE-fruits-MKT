@@ -12,6 +12,7 @@ jobs:
   backfill:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    
     steps:
       - name: Run backfill script
         run: |
@@ -27,7 +28,7 @@ jobs:
           };
           
           async function main() {
-            const days = parseInt('${{ github.event.inputs.days }}') || 90;
+            const days = 90;
             const end = new Date();
             const start = new Date();
             start.setDate(start.getDate() - days);
@@ -43,11 +44,62 @@ jobs:
               console.log('Fetching skip=' + skip);
               const res = await fetch(url);
               const data = await res.json();
-              if (data.length === 0) break;
+              if (!data.length) break;
               all = all.concat(data);
               if (data.length < 5000) break;
               skip += 5000;
               await new Promise(r => setTimeout(r, 300));
             }
             
-            console.log('Total N
+            console.log('Total rows:', all.length);
+            const sanChong = all.filter(d => d.MarketName && d.MarketName.includes('三重'));
+            console.log('SanChong rows:', sanChong.length);
+            
+            for (let i = 0; i <= days; i++) {
+              const date = new Date();
+              date.setDate(date.getDate() - i);
+              const queryDate = toMinguo(date);
+              
+              if (date.getDay() === 1) {
+                const empty = { 休市: true, 交易日期: queryDate, data: [] };
+                await fetch(`${KV_URL}/set/fruit:sc:${queryDate}`, {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${KV_TOKEN}` },
+                  body: JSON.stringify(empty)
+                });
+                console.log(queryDate + ': 休市');
+                continue;
+              }
+              
+              const raw = sanChong.filter(d => d.TransDate === queryDate);
+              const seen = new Set();
+              const data = raw.filter(d => {
+                const key = d.CropName.trim();
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              }).map(d => ({
+                作物名稱: d.CropName.trim(),
+                平均價: +d.Avg_Price || 0,
+                交易量: +d.Trans_Quantity || 0
+              }));
+              
+              const result = { 休市: false, 交易日期: queryDate, data };
+              await fetch(`${KV_URL}/set/fruit:sc:${queryDate}`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${KV_TOKEN}` },
+                body: JSON.stringify(result)
+              });
+              console.log(queryDate + ': ' + data.length);
+            }
+            console.log('Done');
+          }
+          
+          main().catch(e => {
+            console.error(e);
+            process.exit(1);
+          });
+          EOF
+        env:
+          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
+          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
