@@ -7,9 +7,27 @@ function getRocDate(date) {
   return `${y}.${m}.${d}`;
 }
 
+async function fetchAllFruit(rocDate) {
+  let allData = [];
+  let offset = 0;
+  const limit = 1000;
+
+  while (true) {
+    const url = `https://data.moa.gov.tw/api/v1/AgriProductsTransType/?Start_time=${rocDate}&End_time=${rocDate}&TransType=N05&Limit=${limit}&Offset=${offset}`;
+    const res = await fetch(url).then(r => r.json());
+    const data = res.Data || [];
+    allData.push(...data);
+    
+    if (data.length < limit) break; // 抓完了
+    offset += limit;
+    if (offset > 5000) break; // 防呆，最多抓5頁
+  }
+  return allData;
+}
+
 export default async function handler(req, res) {
   const results = [];
-  const dates = req.query.date ? [req.query.date] : ['2026-05-27','2026-05-28','2026-05-29'];
+  const dates = req.query.date ? [req.query.date] : ['2026-05-27','2026-05-28'];
 
   for (const dateStr of dates) {
     const d = new Date(dateStr);
@@ -17,11 +35,8 @@ export default async function handler(req, res) {
     const key = `fruit:${dateStr}`;
 
     try {
-      // 加 TransType=N05 只抓水果，limit=5000 確保不截斷
-      const url = `https://data.moa.gov.tw/api/v1/AgriProductsTransType/?Start_time=${rocDate}&End_time=${rocDate}&TransType=N05&limit=5000`;
-      const allData = await fetch(url).then(r => r.json()).then(j => j.Data || []);
+      const allData = await fetchAllFruit(rocDate);
 
-      // 只保留三重區 + 板橋區
       const data = allData.filter(item => 
         item.MarketName === '三重區' || item.MarketName === '板橋區'
       );
