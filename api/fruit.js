@@ -7,8 +7,10 @@ export default async function handler(req, res) {
     const days = parseInt(req.query.days) || 1;
     
     const allKeys = await kv.keys('fruit:*');
+    
+    // 支援 fruit:2026-05-10 跟 fruit:2026.05.10 兩種格式
     const validKeys = allKeys
-      .filter(k => /^fruit:\d{4}-\d{2}-\d{2}$/.test(k))
+      .filter(k => /^fruit:\d{4}[.-]\d{2}[.-]\d{2}$/.test(k))
       .sort()
       .reverse()
       .slice(0, days);
@@ -24,21 +26,14 @@ export default async function handler(req, res) {
       .filter(Array.isArray)
       .flat()
       .filter(d => {
-        // 確保欄位存在且是字串才處理
-        return d 
-          && typeof d.市場名稱 === 'string' 
-          && typeof d.作物名稱 === 'string'
-          && d.市場名稱.trim() 
-          && d.作物名稱.trim();
-      })
-      .filter(d => {
+        if (!d?.市場名稱 || !d?.作物名稱) return false;
         const key = d.市場名稱.trim() + '_' + d.作物名稱.trim();
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       })
       .map(d => ({
-        交易日期: d.交易日期 || '',
+        交易日期: d.交易日期,
         市場名稱: d.市場名稱.trim(),
         作物名稱: d.作物名稱.trim(),
         上價: +d.上價 || 0,
