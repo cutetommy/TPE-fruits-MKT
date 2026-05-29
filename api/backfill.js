@@ -18,36 +18,40 @@ async function fetchAllFruit(rocDate) {
     const data = res.Data || [];
     allData.push(...data);
     
-    if (data.length < limit) break; // 抓完了
+    if (data.length < limit) break;
     offset += limit;
-    if (offset > 5000) break; // 防呆，最多抓5頁
+    if (offset > 10000) break;
   }
   return allData;
 }
 
 export default async function handler(req, res) {
   const results = [];
-  const dates = req.query.date ? [req.query.date] : ['2026-05-27','2026-05-28'];
+  const dateStr = req.query.date || '2026-05-27';
+  const d = new Date(dateStr);
+  const rocDate = getRocDate(d);
+  const key = `fruit:${dateStr}`;
 
-  for (const dateStr of dates) {
-    const d = new Date(dateStr);
-    const rocDate = getRocDate(d);
-    const key = `fruit:${dateStr}`;
+  try {
+    const allData = await fetchAllFruit(rocDate);
 
-    try {
-      const allData = await fetchAllFruit(rocDate);
+    // 1. 印出當天所有市場名稱，看三重到底叫什麼
+    const allMarkets = [...new Set(allData.map(i => i.MarketName))].sort();
 
-      const data = allData.filter(item => 
-        item.MarketName === '三重區' || item.MarketName === '板橋區'
-      );
+    // 2. 寬鬆比對，只要包含三重或板橋就抓
+    const data = allData.filter(item => 
+      item.MarketName?.includes('三重') || item.MarketName?.includes('板橋')
+    );
 
-      await kv.set(key, data);
-      await kv.expire(key, 60 * 60 * 24 * 200);
-      results.push(`✅ ${key}: 水果全市場 ${allData.length}筆 → 三重板橋 ${data.length}筆`);
+    await kv.set(key, data);
+    await kv.expire(key, 60 * 60 * 24 * 200);
+    
+    results.push(`✅ ${key}: 水果全市場 ${allData.length}筆 → 三重板橋 ${data.length}筆`);
+    results.push(`當天所有市場: ${allMarkets.join(', ')}`); // 重點看這行
 
-    } catch (e) {
-      results.push(`✗ ${dateStr}: ${e.message}`);
-    }
+  } catch (e) {
+    results.push(`✗ ${dateStr}: ${e.message}`);
   }
+
   res.status(200).json({ results });
 }
