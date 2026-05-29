@@ -1,56 +1,79 @@
-name: Backfill 三重241 90天
-on: { workflow_dispatch: {} }
+name: Backfill 三重 241
+on:
+  workflow_dispatch:
+
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install cheerio
       - run: |
           node <<'EOF'
+          const cheerio = require('cheerio');
           const U = process.env.U;
           const T = process.env.T;
-          const toM = d => `${d.getFullYear()-1911}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
-          
-          for(let i=0; i<90; i++){
-            const dt = new Date(); dt.setDate(dt.getDate()-i);
-            const qs = toM(dt);
-            
-            if(dt.getDay()===1){
-              await fetch(`${U}/set/fruit:sc:${qs}`,{method:'POST',headers:{Authorization:`Bearer ${T}`},body:JSON.stringify({休市:true,交易日期:qs,data:[]})});
-              console.log(qs,'休市'); continue;
-            }
-            
-            const res = await fetch(`https://data.moa.gov.tw/api/v1/AgriProductsTransType/?Start_time=${qs}&End_time=${qs}&$limit=20000`).then(r=>r.json());
-            const all = res.Data || [];
-            
-            // 關鍵：改成 241
-            const sc = all.filter(x => x.MarketCode === '241' && x.TcType === 'N05');
-            
-            const map = new Map();
-            sc.forEach(x=>{
-              const n = x.CropName?.trim();
-              if(n && !map.has(n)){
-                map.set(n,{
-                  作物名稱: n,
-                  上價: +x.Upper_Price || 0,
-                  中價: +x.Middle_Price || 0,
-                  下價: +x.Lower_Price || 0,
-                  平均價: +x.Avg_Price || 0,
-                  交易量: +x.Trans_Quantity || 0
-                });
-              }
+
+          const toROC = d => `${d.getFullYear()-1911}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+          const toKey = d => `${d.getFullYear()-1911}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+
+          async function fetchDay(dateStr){
+            const url = 'https://amis.afa.gov.tw/fruit/FruitProdDayTransInfo.aspx';
+            const params = new URLSearchParams({
+              'ctl00$contentPlaceHolder$txtTransDate': dateStr,
+              'ctl00$contentPlaceHolder$ddlMarket': '241',
+              'ctl00$contentPlaceHolder$hfType': 'N05'
             });
-            
-            const data = Array.from(map.values());
-            await fetch(`${U}/set/fruit:sc:${qs}`,{
+            const res = await fetch(url+'?'+params.toString(), {
+              headers: {'User-Agent':'Mozilla/5.0'}
+            });
+            const html = await res.text();
+            const $ = cheerio.load(html);
+            const rows = [];
+            $('#ctl00_contentPlaceHolder_grid tr').each((i,tr)=>{
+              if(i===0) return;
+              const tds = $(tr).find('td');
+              if(tds.length<6) return;
+              const name = $(tds[0]).text().trim();
+              if(!name || name==='小計') return;
+              rows.push({
+                作物名稱: name,
+                上價: parseFloat($(tds[1]).text())||0,
+                中價: parseFloat($(tds[2]).text())||0,
+                下價: parseFloat($(tds[3]).text())||0,
+                平均價: parseFloat($(tds[4]).text())||0,
+                交易量: parseFloat($(tds[5]).text())||0
+              });
+            });
+            return rows;
+          }
+
+          async function setKV(key,val){
+            await fetch(`${U}/set/${key}`,{
               method:'POST',
               headers:{Authorization:`Bearer ${T}`,'Content-Type':'application/json'},
-              body:JSON.stringify({休市:data.length===0,市場名稱:'三重果菜市場',交易日期:qs,data})
+              body:JSON.stringify(val)
             });
-            console.log(`${qs}: ${data.length}筆`);
-            await new Promise(r=>setTimeout(r,600));
           }
-          console.log('完成');
+
+          (async()=>{
+            for(let i=0;i<90;i++){
+              const dt=new Date();dt.setDate(dt.getDate()-i);
+              const qs = toROC(dt);
+              const key = toKey(dt);
+              if(dt.getDay()===1){await setKV(`fruit:sc:${key}`,{休市:true,交易日期:key,data:[]});console.log(key+' 休市');continue}
+              try{
+                const data = await fetchDay(qs);
+                await setKV(`fruit:sc:${key}`,{休市:false,市場名稱:'三重果菜市場',交易日期:key,data});
+                console.log(`${key}: ${data.length}筆`);
+              }catch(e){console.log(key+' 失敗',e.message)}
+              await new Promise(r=>setTimeout(r,1200));
+            }
+            console.log('完成');
+          })();
           EOF
         env:
           U: ${{ secrets.KV_REST_API_URL }}
