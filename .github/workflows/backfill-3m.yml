@@ -11,7 +11,7 @@ on:
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     
     steps:
       - name: Run backfill script
@@ -27,33 +27,35 @@ jobs:
             return `${y}.${m}.${d}`;
           };
           
-          async function main() {
-            const days = 90;
-            const end = new Date();
-            const start = new Date();
-            start.setDate(start.getDate() - days);
-            const startStr = toMinguo(start);
-            const endStr = toMinguo(end);
-            
+          async function fetchOneDay(dateStr) {
             const base = 'https://data.moa.gov.tw/api/v1/AgriProductsTransType';
-            let all = [];
-            let skip = 0;
-            
-            while (true) {
-              const url = `${base}/?Start_time=${startStr}&End_time=${endStr}&TransType=N05&$limit=5000&$skip=${skip}`;
-              console.log('Fetching skip=' + skip);
-              const res = await fetch(url);
-              const data = await res.json();
-              if (!data.length) break;
-              all = all.concat(data);
-              if (data.length < 5000) break;
-              skip += 5000;
-              await new Promise(r => setTimeout(r, 300));
+            const url = `${base}/?Start_time=${dateStr}&End_time=${dateStr}&TransType=N05&$limit=10000`;
+            const res = await fetch(url);
+            if (!res.ok) {
+              console.error(`API Error ${dateStr}: ${res.status}`);
+              return [];
             }
-            
-            console.log('Total rows:', all.length);
-            const sanChong = all.filter(d => d.MarketName && d.MarketName.includes('三重'));
-            console.log('SanChong rows:', sanChong.length);
+            return await res.json();
+          }
+          
+          async function setKV(key, value) {
+            await fetch(`${KV_URL}/set/${key}`, {
+              method: 'POST',
+              headers: { 
+                Authorization: `Bearer ${KV_TOKEN}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(value)
+            });
+            await fetch(`${KV_URL}/expire/${key}/17280000`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${KV_TOKEN}` }
+            });
+          }
+          
+          async function main() {
+            const days = parseInt('${{ github.event.inputs.days }}') || 90;
+            let totalCount = 0;
             
             for (let i = 0; i <= days; i++) {
               const date = new Date();
@@ -62,36 +64,43 @@ jobs:
               
               if (date.getDay() === 1) {
                 const empty = { 休市: true, 交易日期: queryDate, data: [] };
-                await fetch(`${KV_URL}/set/fruit:sc:${queryDate}`, {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${KV_TOKEN}` },
-                  body: JSON.stringify(empty)
-                });
-                console.log(queryDate + ': 休市');
+                await setKV(`fruit:sc:${queryDate}`, empty);
+                console.log(`${queryDate}: 休市`);
                 continue;
               }
               
-              const raw = sanChong.filter(d => d.TransDate === queryDate);
+              const all = await fetchOneDay(queryDate);
+              const sanChong = all.filter(d => d.MarketName && d.MarketName.includes('三重'));
+              totalCount += sanChong.length;
+              
               const seen = new Set();
-              const data = raw.filter(d => {
+              const data = sanChong.filter(d => {
                 const key = d.CropName.trim();
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
               }).map(d => ({
                 作物名稱: d.CropName.trim(),
+                上價: +d.Upper_Price || 0,
+                中價: +d.Middle_Price || 0,
+                下價: +d.Lower_Price || 0,
                 平均價: +d.Avg_Price || 0,
                 交易量: +d.Trans_Quantity || 0
               }));
               
-              const result = { 休市: false, 交易日期: queryDate, data };
-              await fetch(`${KV_URL}/set/fruit:sc:${queryDate}`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${KV_TOKEN}` },
-                body: JSON.stringify(result)
-              });
-              console.log(queryDate + ': ' + data.length);
+              const result = { 
+                休市: data.length === 0, 
+                市場名稱: '三重果菜市場',
+                交易日期: queryDate, 
+                data 
+              };
+              
+              await setKV(`fruit:sc:${queryDate}`, result);
+              console.log(`${queryDate}: ${data.length}`);
+              await new Promise(r => setTimeout(r, 500)); // 避免打爆農業部
             }
+            
+            console.log('Total SanChong rows:', totalCount);
             console.log('Done');
           }
           
