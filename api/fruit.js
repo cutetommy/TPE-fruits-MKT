@@ -6,7 +6,6 @@ export default async function handler(req, res) {
   try {
     const days = parseInt(req.query.days) || 1;
     
-    // 只抓 YYYY-MM-DD 格式的 key，過濾掉 115.xx 舊格式
     const allKeys = await kv.keys('fruit:*');
     const validKeys = allKeys
       .filter(k => /^fruit:\d{4}-\d{2}-\d{2}$/.test(k))
@@ -25,14 +24,21 @@ export default async function handler(req, res) {
       .filter(Array.isArray)
       .flat()
       .filter(d => {
-        if (!d?.市場名稱 || !d?.作物名稱) return false;
+        // 確保欄位存在且是字串才處理
+        return d 
+          && typeof d.市場名稱 === 'string' 
+          && typeof d.作物名稱 === 'string'
+          && d.市場名稱.trim() 
+          && d.作物名稱.trim();
+      })
+      .filter(d => {
         const key = d.市場名稱.trim() + '_' + d.作物名稱.trim();
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       })
       .map(d => ({
-        交易日期: d.交易日期,
+        交易日期: d.交易日期 || '',
         市場名稱: d.市場名稱.trim(),
         作物名稱: d.作物名稱.trim(),
         上價: +d.上價 || 0,
@@ -45,6 +51,6 @@ export default async function handler(req, res) {
     res.status(200).json(data);
   } catch (e) {
     console.error('Fruit API Error:', e);
-    res.status(500).json({ error: e.message, stack: e.stack });
+    res.status(500).json({ error: e.message });
   }
 }
