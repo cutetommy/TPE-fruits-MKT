@@ -22,64 +22,60 @@ async function fetchAgriRange(startDate, endDate) {
     all = all.concat(data);
     if (data.length < limit) break;
     skip += limit;
-    await new Promise(r => setTimeout(r, 200)); // 避免打太快被ban
+    await new Promise(r => setTimeout(r, 300));
   }
   return all;
 }
 
 export default async function handler(req, res) {
   try {
-    // 抓過去 90 天
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 90);
-    
-    const startStr = toMinguo(start);
-    const endStr = toMinguo(end);
+    // 用 from=115.05.20&to=115.05.29 這樣控制區間，一次最多 10 天
+    const from = req.query.from;
+    const to = req.query.to;
+    if (!from || !to) {
+      return res.status(400).json({ error: '需要 from 跟 to，格式 115.05.20' });
+    }
 
-    // 1. 一次抓 90 天區間，處理分頁
-    const all = await fetchAgriRange(startStr, endStr);
+    const results = [];
+    const all = await fetchAgriRange(from, to);
 
-    // 2. 只留三重，用名稱 includes，不要用 MarketCode
     const sanChongAll = all.filter(d =>
-      d.MarketName &&
-      d.MarketName.includes('三重')
+      d.MarketName && d.MarketName.includes('三重')
     );
 
-    // 3. 按日期分組寫 KV
-    const results = [];
-    const dateSet = new Set(sanChongAll.map(d => d.TransDate));
+    // 算出 from ~ to 的所有日期
+    const [fy, fm, fd] = from.split('.');
+    const [ty, tm, td] = to.split('.');
+    const startDate = new Date(`${parseInt(fy) + 1911}-${fm}-${fd}`);
+    const endDate = new Date(`${parseInt(ty) + 1911}-${tm}-${td}`);
     
-    for (let i = 0; i < 90; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const queryDate = toMinguo(date);
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const queryDate = toMinguo(d);
       
-      // 週一休市
-      if (date.getDay() === 1) {
+      if (d.getDay() === 1) {
         const empty = { 休市: true, 市場名稱: '三重果菜市場', 交易日期: queryDate, data: [] };
         await kv.set(`fruit:sc:${queryDate}`, empty);
         results.push(`${queryDate}: 休市`);
         continue;
       }
 
-      const raw = sanChongAll.filter(d => d.TransDate === queryDate);
+      const raw = sanChongAll.filter(item => item.TransDate === queryDate);
       
       const seen = new Set();
-      const data = raw.filter(d => {
-        const key = d.CropName.trim();
+      const data = raw.filter(item => {
+        const key = item.CropName.trim();
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
-      }).map(d => ({
-        交易日期: d.TransDate,
+      }).map(item => ({
+        交易日期: item.TransDate,
         市場名稱: '三重果菜市場',
-        作物名稱: d.CropName.trim(),
-        上價: +d.Upper_Price || 0,
-        中價: +d.Middle_Price || 0,
-        下價: +d.Lower_Price || 0,
-        平均價: +d.Avg_Price || 0,
-        交易量: +d.Trans_Quantity || 0
+        作物名稱: item.CropName.trim(),
+        上價: +item.Upper_Price || 0,
+        中價: +item.Middle_Price || 0,
+        下價: +item.Lower_Price || 0,
+        平均價: +item.Avg_Price || 0,
+        交易量: +item.Trans_Quantity || 0
       }));
 
       const result = { 
@@ -96,7 +92,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({ 
       success: true,
-      totalDays: 90,
+      range: `${from} ~ ${to}`,
       totalRecords: all.length,
       sanChongRecords: sanChongAll.length,
       results 
