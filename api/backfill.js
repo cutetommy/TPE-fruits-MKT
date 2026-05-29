@@ -17,41 +17,44 @@ async function fetchAllFruit(rocDate) {
     const res = await fetch(url).then(r => r.json());
     const data = res.Data || [];
     allData.push(...data);
-    
     if (data.length < limit) break;
     offset += limit;
-    if (offset > 10000) break;
+    if (offset > 30000) break;
   }
   return allData;
 }
 
 export default async function handler(req, res) {
   const results = [];
-  const dateStr = req.query.date || '2026-05-27';
-  const d = new Date(dateStr);
-  const rocDate = getRocDate(d);
-  const key = `fruit:${dateStr}`;
+  const dates = req.query.date ? [req.query.date] : ['2026-05-26','2026-05-27','2026-05-28','2026-05-29'];
 
-  try {
-    const allData = await fetchAllFruit(rocDate);
+  for (const dateStr of dates) {
+    const d = new Date(dateStr);
+    const rocDate = getRocDate(d);
+    const key = `fruit:${dateStr}`;
 
-    // 1. 印出當天所有市場名稱，看三重到底叫什麼
-    const allMarkets = [...new Set(allData.map(i => i.MarketName))].sort();
+    try {
+      const allData = await fetchAllFruit(rocDate);
 
-    // 2. 寬鬆比對，只要包含三重或板橋就抓
-    const data = allData.filter(item => 
-      item.MarketName?.includes('三重') || item.MarketName?.includes('板橋')
-    );
+      // 只用 MarketCode 篩，109=三重，220=板橋
+      const data = allData.filter(item => 
+        item.MarketCode === '109' || item.MarketCode === '220'
+      ).map(d => ({
+        ...d,
+        // 把錯的名稱蓋掉，統一顯示
+        MarketName: d.MarketCode === '109' ? '三重區' : '板橋區'
+      }));
 
-    await kv.set(key, data);
-    await kv.expire(key, 60 * 60 * 24 * 200);
-    
-    results.push(`✅ ${key}: 水果全市場 ${allData.length}筆 → 三重板橋 ${data.length}筆`);
-    results.push(`當天所有市場: ${allMarkets.join(', ')}`); // 重點看這行
+      await kv.set(key, data);
+      await kv.expire(key, 60 * 60 * 24 * 200);
+      
+      const code109 = allData.filter(i => i.MarketCode === '109').length;
+      const code220 = allData.filter(i => i.MarketCode === '220').length;
+      results.push(`✅ ${key}: 三重(109) ${code109}筆，板橋(220) ${code220}筆`);
 
-  } catch (e) {
-    results.push(`✗ ${dateStr}: ${e.message}`);
+    } catch (e) {
+      results.push(`✗ ${dateStr}: ${e.message}`);
+    }
   }
-
   res.status(200).json({ results });
 }
