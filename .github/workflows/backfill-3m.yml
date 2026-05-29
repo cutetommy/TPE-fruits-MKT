@@ -30,12 +30,19 @@ jobs:
           async function fetchOneDay(dateStr) {
             const base = 'https://data.moa.gov.tw/api/v1/AgriProductsTransType';
             const url = `${base}/?Start_time=${dateStr}&End_time=${dateStr}&TransType=N05&$limit=10000`;
-            const res = await fetch(url);
-            if (!res.ok) {
-              console.error(`API Error ${dateStr}: ${res.status}`);
+            try {
+              const res = await fetch(url);
+              const data = await res.json();
+              // 防呆：如果不是陣列就當沒資料
+              if (!Array.isArray(data)) {
+                console.log(`${dateStr}: API回傳非陣列 ${JSON.stringify(data).slice(0,50)}`);
+                return [];
+              }
+              return data;
+            } catch (e) {
+              console.error(`${dateStr}: fetch error`, e.message);
               return [];
             }
-            return await res.json();
           }
           
           async function setKV(key, value) {
@@ -63,7 +70,7 @@ jobs:
               const queryDate = toMinguo(date);
               
               if (date.getDay() === 1) {
-                const empty = { 休市: true, 交易日期: queryDate, data: [] };
+                const empty = { 休市: true, 市場名稱: '三重果菜市場', 交易日期: queryDate, data: [] };
                 await setKV(`fruit:sc:${queryDate}`, empty);
                 console.log(`${queryDate}: 休市`);
                 continue;
@@ -97,7 +104,7 @@ jobs:
               
               await setKV(`fruit:sc:${queryDate}`, result);
               console.log(`${queryDate}: ${data.length}`);
-              await new Promise(r => setTimeout(r, 500)); // 避免打爆農業部
+              await new Promise(r => setTimeout(r, 500));
             }
             
             console.log('Total SanChong rows:', totalCount);
