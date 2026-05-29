@@ -1,8 +1,6 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron-update-fruit",
-      "schedule": "0 18 * * *"
-    }
-  ]
-}
+   {
+     "crons": [{
+       "path": "/api/cron",
+       "schedule": "0 0 * * *"
+     }]
+   }
